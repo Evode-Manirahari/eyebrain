@@ -14,7 +14,7 @@ import requests
 
 DEFAULT_BASE_URL = os.getenv("MINIMAX_TTS_BASE_URL", "https://api.minimax.io/v1")
 DEFAULT_MODEL = os.getenv("MINIMAX_TTS_MODEL", "speech-02-turbo")
-DEFAULT_VOICE = os.getenv("MINIMAX_TTS_VOICE", "male-qn-qingse")
+DEFAULT_VOICE = os.getenv("MINIMAX_TTS_VOICE", "English_Trustworth_Man")
 
 
 class MiniMaxTTSError(RuntimeError):
