@@ -17,19 +17,21 @@ INDEX_HTML = r"""<!doctype html>
   header .sub{color:var(--muted);font-size:13px}
   .status{margin-left:auto;color:var(--muted);font-size:12px;text-align:right}
   main{max-width:980px;margin:0 auto;padding:26px}
-  .ask{display:flex;gap:10px}
-  input[type=text]{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--txt);
-    padding:14px 16px;border-radius:12px;font-size:16px;outline:none}
-  input[type=text]:focus{border-color:var(--accent)}
-  button{background:var(--accent);color:#05221f;border:0;padding:0 18px;border-radius:12px;font-weight:600;cursor:pointer;font-size:15px}
-  button.ghost{background:var(--panel);color:var(--txt);border:1px solid var(--line)}
+  .ask{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);
+       border-radius:16px;padding:6px 8px 6px 18px}
+  .ask:focus-within{border-color:var(--accent)}
+  input[type=text]{flex:1;background:transparent;border:0;color:var(--txt);font-size:17px;outline:none;padding:12px 0}
+  input[type=text]::placeholder{color:var(--muted)}
+  button{border:0;cursor:pointer;font:inherit}
+  button.ghost{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:3px 10px;font-size:12px}
   button:active{transform:translateY(1px)}
-  .mic{width:52px;font-size:20px}
-  .mic.live{background:var(--warn);animation:pulse 1s infinite}
+  .mic{width:46px;height:46px;border-radius:50%;background:var(--accent);color:#05221f;flex:none;
+       display:flex;align-items:center;justify-content:center;transition:background .15s,transform .1s}
+  .mic:hover{filter:brightness(1.08)}
+  .mic:active{transform:scale(.95)}
+  .mic.live{background:var(--warn);color:#2a1800;animation:pulse 1.1s infinite}
+  .hint{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(240,168,95,.6)}100%{box-shadow:0 0 0 14px rgba(240,168,95,0)}}
-  .chips{margin:14px 0 6px;display:flex;flex-wrap:wrap;gap:8px}
-  .chip{background:var(--panel);border:1px solid var(--line);color:var(--muted);padding:7px 12px;border-radius:20px;cursor:pointer;font-size:13px}
-  .chip:hover{border-color:var(--accent2);color:var(--txt)}
   .answer{margin-top:22px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;display:none}
   .answer.show{display:block}
   .answer .label{color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;display:flex;gap:10px;align-items:center}
@@ -64,12 +66,15 @@ INDEX_HTML = r"""<!doctype html>
   <div class="status" id="status">loading…</div>
 </header>
 <main>
-  <div class="ask">
-    <input id="q" type="text" placeholder="Ask: When did the display get knocked over?" autocomplete="off"/>
-    <button id="mic" class="mic ghost" title="Speak">🎤</button>
-    <button id="go">Ask</button>
-  </div>
-  <div class="chips" id="chips"></div>
+  <form class="ask" id="askForm">
+    <input id="q" type="text" placeholder="Ask your cameras anything…" autocomplete="off"/>
+    <button type="button" id="mic" class="mic" title="Tap to speak" aria-label="Speak">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21.5"/>
+      </svg>
+    </button>
+  </form>
+  <div class="hint" id="hint">Tap the mic and ask — or type and press Enter.</div>
 
   <div class="answer" id="answer">
     <div class="label">Answer <span class="badge" id="synth"></span> <button class="ghost" id="replay" style="padding:2px 10px;font-size:12px">🔊 replay</button></div>
@@ -84,17 +89,6 @@ INDEX_HTML = r"""<!doctype html>
 </main>
 <script>
 const $=s=>document.querySelector(s);
-const EXAMPLES=[
-  "When did the display get knocked over?",
-  "Where did the contractor leave the equipment?",
-  "Did anyone leave a package by the rear exit?",
-  "Was there any spill on the floor?"
-];
-function renderChips(){
-  $("#chips").innerHTML="";
-  EXAMPLES.forEach(t=>{const c=document.createElement("div");c.className="chip";c.textContent=t;
-    c.onclick=()=>{$("#q").value=t;ask();};$("#chips").appendChild(c);});
-}
 async function loadStatus(){
   try{const r=await fetch("/api/cameras");const d=await r.json();
     $("#status").innerHTML=`${d.cameras.length} cameras &middot; ${d.indexed_moments} moments &middot; ${d.powered_by||"on-device"}`;
@@ -168,10 +162,9 @@ function setupMic(){
   rec.onend=()=>$("#mic").classList.remove("live");
   $("#mic").onclick=()=>{try{$("#mic").classList.add("live");rec.start();}catch(e){}};
 }
-$("#go").onclick=ask;
-$("#q").addEventListener("keydown",e=>{if(e.key==="Enter")ask();});
+$("#askForm").addEventListener("submit",e=>{e.preventDefault();ask();});
 $("#replay").onclick=()=>lastAnswer&&speak(lastAnswer);
-renderChips();loadStatus();setupMic();
+loadStatus();setupMic();
 </script>
 </body>
 </html>
