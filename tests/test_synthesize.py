@@ -52,13 +52,19 @@ def test_narrative_query_detection():
 
 
 def test_narrative_answer_builds_chronological_story():
+    summaries = [
+        "a person walks in carrying a black backpack",
+        "the backpack is set on the floor by the exit door",
+        "the person steps away leaving the bag unattended",
+        "a person walks past the exit and out of frame",
+    ]
     moments = [
         QueryResult(
-            moment=Moment(camera_id="cam2", camera_name="Back Hallway", start_sec=s, end_sec=s + 2,
-                          summary=f"a person does action {s}"),
+            moment=Moment(camera_id="cam2", camera_name="Back Hallway", start_sec=s * 2,
+                          end_sec=s * 2 + 2, summary=summaries[s]),
             score=0.9,
         )
-        for s in (0, 2, 4, 6)
+        for s in range(len(summaries))
     ]
     ca, seq = narrative_answer("What happened?", moments)
     assert ca.metadata["synthesis"] == "narrative"
