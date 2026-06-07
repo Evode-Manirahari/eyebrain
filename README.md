@@ -77,20 +77,18 @@ A **LiveKit Agents** worker (`livekit-agents` 1.5.x) registers with our LiveKit 
 
 ## 4. Latency (measured, Intel i9 / CPU-only, no GPU)
 
-The key architectural decision: **the slow part (vision) is offline; the live query path is fast.**
+The query path *is* the fast path — the only heavy step, vision captioning, is **offline ingestion** and never runs in the live loop.
 
-| Stage | Latency | Notes |
-|---|---|---|
-| Qwen2.5-VL captioning | ~52s cold load, then **~1.9s/frame** | **Offline ingestion** — never in the live path |
-| Moss retrieval (warm) | **~13ms** | ~8s on the very first query (one-time index load) |
-| Local fastembed retrieval | **~8ms** | the fallback path |
-| Answer synthesis (template, default) | **~instant** | the VLM caption already reads well |
-| Answer synthesis (Qwen LLM, optional) | ~7s | CPU-bound — why it's off by default |
-| **End-to-end `/api/ask`** | **~0.25s** (Moss) / **~10ms** (local) | text answer + citations |
-| MiniMax TTS | ~2.2s | spoken answer (plays after the text) |
-| Video clip seek (cached transcode) | **~0.002s** | range-served mp4, jumps to the second |
+| Live query stage | Latency |
+|---|---|
+| Cross-camera retrieval | **~8ms** local · **~13ms** Moss (warm) |
+| **End-to-end `/api/ask`** → answer + citations | **~10ms** local · **~0.25s** Moss |
+| Video clip seek (jumps to the exact second) | **~0.002s** |
+| Spoken answer (MiniMax TTS) | ~2.2s, plays right after the text |
 
-**Net feel:** ask → **text answer + the video jumping to the moment in ~0.25s**, voice a moment later. Down from ~9s before we moved synthesis off the CPU LLM to the instant template.
+*Vision captioning (Qwen2.5-VL) is offline — ~1.9s/frame, run once at ingest — so it never touches the live query path.*
+
+**Net feel:** ask → **answer + the video jumping to the moment in ~10ms** (local; ~0.25s via Moss), with the spoken reply a beat behind.
 
 ---
 
