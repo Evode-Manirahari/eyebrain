@@ -11,12 +11,12 @@ import io
 import os
 
 import cv2
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from ..rag.retriever import make_retriever
-from ..rag.synthesize import synthesize_cited_answer
+from ..rag.synthesize import answer_for
 from .registry import CameraRegistry
 from .ui import INDEX_HTML
 
@@ -54,7 +54,7 @@ def ask(req: AskRequest) -> JSONResponse:
     if not question:
         raise HTTPException(400, "empty question")
     results = _retriever.search(question, top_k=req.top_k or TOP_K)
-    answer = synthesize_cited_answer(question, results)
+    answer = answer_for(question, results)  # EYEBRAIN_SYNTH=fast (default) | llm
 
     citations = []
     for r in results:
@@ -96,6 +96,18 @@ def tts(text: str = Query(..., min_length=1, max_length=800)) -> Response:
     except minimax_tts.MiniMaxTTSError as exc:
         raise HTTPException(502, f"TTS failed: {exc}")
     return Response(content=audio, media_type="audio/mpeg")
+
+
+@app.get("/api/video/{camera}")
+def video(camera: str, request: Request) -> Response:
+    """Stream a camera's footage as browser-playable mp4 (range-enabled for seeking)."""
+    from .video import ensure_web_mp4, serve_with_range
+
+    entry = _registry.get(camera)
+    if entry is None:
+        raise HTTPException(404, f"camera {camera} not registered")
+    mp4 = ensure_web_mp4(entry.video_path)
+    return serve_with_range(mp4, request.headers.get("range"))
 
 
 @app.get("/api/frame")

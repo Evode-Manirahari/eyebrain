@@ -45,8 +45,23 @@ class QueryReq(BaseModel):
     alpha: float = 0.7
 
 
+_loaded = False  # has the index been loaded into the runtime this process?
+
+
 async def _index_exists(client) -> bool:
     return INDEX in {ix.name for ix in await client.list_indexes()}
+
+
+async def _ensure_loaded(client) -> bool:
+    """Load the index into memory once; subsequent queries are sub-10ms."""
+    global _loaded
+    if _loaded:
+        return True
+    if not await _index_exists(client):
+        return False
+    await client.load_index(INDEX)
+    _loaded = True
+    return True
 
 
 @app.get("/health")
@@ -66,29 +81,32 @@ async def count() -> dict:
 
 @app.post("/add")
 async def add(req: AddReq) -> dict:
+    global _loaded
     client = _client()
     docs = [DocumentInfo(id=d.id, text=d.text, metadata=d.metadata) for d in req.docs]
     if await _index_exists(client):
         await client.add_docs(INDEX, docs)
     else:
         await client.create_index(INDEX, docs, MODEL)
+    _loaded = False  # force a reload so new docs are queryable
     return {"added": len(docs)}
 
 
 @app.post("/clear")
 async def clear() -> dict:
+    global _loaded
     client = _client()
     if await _index_exists(client):
         await client.delete_index(INDEX)
+    _loaded = False
     return {"cleared": True}
 
 
 @app.post("/query")
 async def query(req: QueryReq) -> dict:
     client = _client()
-    if not await _index_exists(client):
+    if not await _ensure_loaded(client):
         return {"docs": []}
-    await client.load_index(INDEX)
     res = await client.query(INDEX, req.text, QueryOptions(top_k=req.top_k, alpha=req.alpha))
     return {
         "docs": [

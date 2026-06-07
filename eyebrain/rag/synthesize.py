@@ -10,6 +10,8 @@ web and voice layers can swap synthesizers without caring which one ran."""
 
 from __future__ import annotations
 
+import os
+
 from .. import config
 from ..models import Citation, CitedAnswer, QueryResult
 from .answer import build_cited_answer
@@ -25,6 +27,33 @@ SYSTEM_PROMPT = (
     "people, times, or cameras that are not in the moments.\n"
     "- Lead with the answer (when/where/what), not with 'based on the footage'."
 )
+
+
+def fast_cited_answer(question: str, results: list[QueryResult]) -> CitedAnswer:
+    """Instant (no-LLM) cited answer built from the top moment. The VLM summary already
+    reads naturally, so we just frame it with the camera + timecode. ~0ms — the lowest-
+    latency path, used by default for live demos."""
+    if not results:
+        return build_cited_answer(question, results)
+    top = results[0].moment
+    cam = top.camera_name or top.camera_id
+    summary = top.summary.strip().rstrip(".")
+    if summary:
+        summary = summary[0].lower() + summary[1:]
+    answer = f"On the {cam} camera at {top.time_range}, {summary}."
+    return CitedAnswer(
+        question=question,
+        answer=answer,
+        citations=[Citation.from_result(r) for r in results],
+        metadata={"result_count": len(results), "synthesis": "fast"},
+    )
+
+
+def answer_for(question: str, results: list[QueryResult]) -> CitedAnswer:
+    """Dispatch by EYEBRAIN_SYNTH: 'fast' (default, instant) or 'llm' (Qwen, ~7s on CPU)."""
+    if os.getenv("EYEBRAIN_SYNTH", "fast").lower() == "llm":
+        return synthesize_cited_answer(question, results)
+    return fast_cited_answer(question, results)
 
 
 def _format_moments(results: list[QueryResult]) -> str:
