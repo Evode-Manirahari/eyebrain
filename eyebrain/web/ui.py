@@ -88,8 +88,20 @@ async function loadStatus(){
     $("#status").innerHTML=`${d.cameras.length} cameras &middot; ${d.indexed_moments} moments &middot; ${d.retriever}`;
   }catch(e){$("#status").textContent="offline";}
 }
-function speak(text){
+let curAudio=null;
+function speakBrowser(text){
   try{window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=1.05;window.speechSynthesis.speak(u);}catch(e){}
+}
+async function speak(text){
+  // Prefer MiniMax TTS (sponsor); fall back to browser speech if unavailable.
+  try{
+    if(curAudio){curAudio.pause();curAudio=null;}
+    const r=await fetch("/api/tts?text="+encodeURIComponent(text));
+    if(!r.ok) throw new Error("tts "+r.status);
+    const blob=await r.blob();
+    curAudio=new Audio(URL.createObjectURL(blob));
+    await curAudio.play();
+  }catch(e){ speakBrowser(text); }
 }
 let lastAnswer="";
 async function ask(){

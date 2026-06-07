@@ -83,6 +83,21 @@ def ask(req: AskRequest) -> JSONResponse:
     )
 
 
+@app.get("/api/tts")
+def tts(text: str = Query(..., min_length=1, max_length=800)) -> Response:
+    """Speak `text` with MiniMax TTS (sponsor). 503 if unconfigured so the UI can fall
+    back to browser speech."""
+    from ..voice import minimax_tts
+
+    if not minimax_tts.is_configured():
+        raise HTTPException(503, "MiniMax TTS not configured")
+    try:
+        audio = minimax_tts.synthesize(text)
+    except minimax_tts.MiniMaxTTSError as exc:
+        raise HTTPException(502, f"TTS failed: {exc}")
+    return Response(content=audio, media_type="audio/mpeg")
+
+
 @app.get("/api/frame")
 def frame(camera: str = Query(...), t: float = Query(0.0)) -> Response:
     """Extract a single JPEG from the local source video at time `t` (seconds)."""
