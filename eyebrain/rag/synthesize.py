@@ -20,18 +20,54 @@ from .answer import build_cited_answer
 _DURATION_RE = re.compile(
     r"\b(how long|how much time|for how long|duration|how many (seconds|minutes))\b", re.I
 )
+_NARRATIVE_RE = re.compile(
+    r"\b(what happened|what did|what'?s going on|what is happening|walk me through|"
+    r"tell me what|describe what|step by step|sequence of events|what.* do(ing)?)\b",
+    re.I,
+)
 
 
 def is_duration_query(question: str) -> bool:
     return bool(_DURATION_RE.search(question or ""))
 
 
-def _span(results: list[QueryResult]):
-    """Pick the top camera and the contiguous run of relevant moments, and return the
-    time span they cover. Used to answer 'how long was X there?'."""
+def is_narrative_query(question: str) -> bool:
+    return bool(_NARRATIVE_RE.search(question or ""))
+
+
+def _similar(a: str, b: str) -> bool:
+    """True if two captions are near-duplicates (so we collapse repeated frames)."""
+    aw, bw = set(a.lower().split()), set(b.lower().split())
+    if not aw or not bw:
+        return False
+    return len(aw & bw) / len(aw | bw) > 0.6
+
+
+def _dedupe_sequence(moments: list[QueryResult], cap: int = 6) -> list[QueryResult]:
+    """Collapse consecutive near-identical captions so a narrative reads as distinct
+    events, not the same frame repeated. Always keeps the last (the outcome)."""
+    kept: list[QueryResult] = []
+    for r in moments:
+        if kept and _similar(kept[-1].moment.summary, r.moment.summary):
+            continue
+        kept.append(r)
+    if moments and (not kept or kept[-1] is not moments[-1]) and not (
+        kept and _similar(kept[-1].moment.summary, moments[-1].moment.summary)
+    ):
+        kept.append(moments[-1])
+    if len(kept) > cap:  # keep first, last, and evenly-spaced middles
+        idxs = sorted({0, len(kept) - 1, *(round(i * (len(kept) - 1) / (cap - 1)) for i in range(cap))})
+        kept = [kept[i] for i in idxs]
+    return kept
+
+
+def _span(results: list[QueryResult], cutoff_ratio: float = 0.65):
+    """Pick the top camera and the run of relevant moments on it, and return the time span
+    they cover. `cutoff_ratio` gates relevance relative to the top hit — duration uses a
+    tight gate (the exact subject), narrative a looser one (the surrounding sequence)."""
     top = results[0]
     cam_id = top.moment.camera_id
-    cutoff = max(0.0, top.score * 0.65)  # relative relevance gate
+    cutoff = max(0.0, top.score * cutoff_ratio)
     span = [r for r in results if r.moment.camera_id == cam_id and r.score >= cutoff]
     if not span:
         span = [top]
@@ -68,13 +104,47 @@ def duration_answer(question: str, results: list[QueryResult]) -> tuple[CitedAns
     return ca, span
 
 
+def narrative_answer(question: str, results: list[QueryResult]) -> tuple[CitedAnswer, list[QueryResult]]:
+    """Answer 'what happened? / what did he do?' by stitching the relevant moments into a
+    chronological story (first -> then -> finally), collapsing repeated frames."""
+    if not results:
+        return build_cited_answer(question, results), results
+    cam_id, _, _, span = _span(results, cutoff_ratio=0.45)  # looser: capture the sequence
+    seq = _dedupe_sequence(sorted(span, key=lambda r: r.moment.start_sec))
+    cam = seq[0].moment.camera_name or cam_id
+
+    def phrase(r: QueryResult) -> str:
+        s = r.moment.summary.strip().rstrip(".")
+        return (s[0].lower() + s[1:]) if s else s
+
+    n = len(seq)
+    if n == 1:
+        body = f"{phrase(seq[0])} (at {format_seconds(seq[0].moment.start_sec)})"
+    else:
+        parts = []
+        for i, r in enumerate(seq):
+            lead = "first, " if i == 0 else ("and finally, " if i == n - 1 else "then ")
+            parts.append(f"{lead}{phrase(r)} ({format_seconds(r.moment.start_sec)})")
+        body = "; ".join(parts)
+    answer = f"On the {cam} camera, here's what happened — {body}."
+    ca = CitedAnswer(
+        question=question,
+        answer=answer,
+        citations=[Citation.from_result(r) for r in seq],
+        metadata={"synthesis": "narrative", "result_count": len(seq)},
+    )
+    return ca, seq
+
+
 def answer_query(retriever, question: str, top_k: int = 5) -> tuple[CitedAnswer, list[QueryResult]]:
-    """Top-level entry for web/voice: handles 'how long' (duration) queries specially,
-    otherwise returns the normal fast/LLM cited answer. Returns (answer, results) so the
-    caller can render citations from the same moment set the answer used."""
+    """Top-level entry for web/voice. Routes by intent:
+    - 'how long' -> duration span; 'what happened / what did X do' -> chronological
+    narrative; otherwise the instant single-moment cited answer. Returns (answer, results)
+    so the caller renders citations from the same moments the answer used."""
     if is_duration_query(question):
-        wide = retriever.search(question, top_k=50)  # need the full run, not just top-k
-        return duration_answer(question, wide)
+        return duration_answer(question, retriever.search(question, top_k=50))
+    if is_narrative_query(question):
+        return narrative_answer(question, retriever.search(question, top_k=50))
     results = retriever.search(question, top_k=top_k)
     return answer_for(question, results), results
 

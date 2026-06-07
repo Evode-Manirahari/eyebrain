@@ -2,7 +2,13 @@
 the LLM-unavailable fallback (pointed at a dead host)."""
 
 from eyebrain.models import Moment, QueryResult
-from eyebrain.rag.synthesize import duration_answer, is_duration_query, synthesize_cited_answer
+from eyebrain.rag.synthesize import (
+    duration_answer,
+    is_duration_query,
+    is_narrative_query,
+    narrative_answer,
+    synthesize_cited_answer,
+)
 
 
 def _result() -> QueryResult:
@@ -37,6 +43,27 @@ def test_duration_answer_measures_span():
     assert ca.metadata["seconds"] >= 8
     assert "seconds" in ca.answer and "Back Hallway" in ca.answer
     assert len(span) == 5
+
+
+def test_narrative_query_detection():
+    assert is_narrative_query("What happened with the backpack?")
+    assert is_narrative_query("Walk me through what the person did")
+    assert not is_narrative_query("How long was the backpack there?")
+
+
+def test_narrative_answer_builds_chronological_story():
+    moments = [
+        QueryResult(
+            moment=Moment(camera_id="cam2", camera_name="Back Hallway", start_sec=s, end_sec=s + 2,
+                          summary=f"a person does action {s}"),
+            score=0.9,
+        )
+        for s in (0, 2, 4, 6)
+    ]
+    ca, seq = narrative_answer("What happened?", moments)
+    assert ca.metadata["synthesis"] == "narrative"
+    assert "first," in ca.answer and "finally," in ca.answer
+    assert len(seq) >= 2
 
 
 def test_llm_unavailable_falls_back_to_template():
