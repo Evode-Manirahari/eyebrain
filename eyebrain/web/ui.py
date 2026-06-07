@@ -1,4 +1,8 @@
-"""Self-contained single-page UI (no external CDNs — resilient to venue wifi)."""
+"""Self-contained single-page UI (no external CDNs — resilient to venue wifi).
+
+Security-console layout: a tab bar (All cameras + one tab per camera), a camera grid you
+click to open and play, each camera's caption "script" (timeline), and a voice agent you
+can ask about all cameras or a single one."""
 
 INDEX_HTML = r"""<!doctype html>
 <html lang="en">
@@ -11,58 +15,60 @@ INDEX_HTML = r"""<!doctype html>
          --accent:#3fd0c9; --accent2:#5b9dff; --warn:#f0a85f; }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-  header{padding:22px 28px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px}
+  header{padding:18px 28px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px}
   .logo{width:30px;height:30px;border-radius:8px;background:radial-gradient(circle at 30% 30%,var(--accent),var(--accent2));box-shadow:0 0 18px rgba(63,208,201,.5)}
   h1{font-size:19px;margin:0;letter-spacing:.5px}
-  header .sub{color:var(--muted);font-size:13px}
   .status{margin-left:auto;color:var(--muted);font-size:12px;text-align:right}
-  main{max-width:980px;margin:0 auto;padding:26px}
+  main{max-width:1080px;margin:0 auto;padding:22px}
   .ask{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);
        border-radius:16px;padding:6px 8px 6px 18px}
   .ask:focus-within{border-color:var(--accent)}
   input[type=text]{flex:1;background:transparent;border:0;color:var(--txt);font-size:17px;outline:none;padding:12px 0}
   input[type=text]::placeholder{color:var(--muted)}
+  .mic{width:46px;height:46px;border-radius:50%;background:var(--accent);color:#05221f;flex:none;border:0;
+       display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,transform .1s}
+  .mic:hover{filter:brightness(1.08)} .mic:active{transform:scale(.95)}
+  .mic.live{background:var(--warn);color:#2a1800;animation:pulse 1.1s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(240,168,95,.6)}100%{box-shadow:0 0 0 14px rgba(240,168,95,0)}}
   button{border:0;cursor:pointer;font:inherit}
   button.ghost{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:3px 10px;font-size:12px}
-  button:active{transform:translateY(1px)}
-  .mic{width:46px;height:46px;border-radius:50%;background:var(--accent);color:#05221f;flex:none;
-       display:flex;align-items:center;justify-content:center;transition:background .15s,transform .1s}
-  .mic:hover{filter:brightness(1.08)}
-  .mic:active{transform:scale(.95)}
-  .mic.live{background:var(--warn);color:#2a1800;animation:pulse 1.1s infinite}
-  .hint{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(240,168,95,.6)}100%{box-shadow:0 0 0 14px rgba(240,168,95,0)}}
-  .answer{margin-top:22px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;display:none}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 14px}
+  .tab{background:var(--panel);border:1px solid var(--line);color:var(--muted);padding:8px 14px;border-radius:20px;cursor:pointer;font-size:13px}
+  .tab:hover{color:var(--txt)} .tab.on{background:var(--accent);color:#05221f;border-color:var(--accent);font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+  .cam{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;transition:border-color .15s}
+  .cam:hover{border-color:var(--accent)}
+  .cam .ph{position:relative}
+  .cam img{width:100%;height:150px;object-fit:cover;background:#000;display:block}
+  .cam .liveband{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;border-radius:6px;padding:2px 8px;display:flex;align-items:center;gap:6px}
+  .dot{width:7px;height:7px;border-radius:50%;background:#ff5d5d;box-shadow:0 0 8px #ff5d5d}
+  .cam .nm{padding:11px 13px;font-weight:600;font-size:14px}
+  .cam .nm small{display:block;color:var(--muted);font-weight:400;font-size:12px;margin-top:2px}
+  .single{display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
+  @media(max-width:820px){.single{grid-template-columns:1fr}}
+  #player{width:100%;max-height:460px;border-radius:12px;background:#000;display:block}
+  .panelttl{color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin:2px 0 8px}
+  .script{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;max-height:460px;overflow:auto}
+  .ev{display:flex;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer}
+  .ev:hover{background:#182230} .ev .t{color:var(--accent2);font-size:12px;flex:none;width:96px}
+  .ev .s{font-size:13px;color:var(--txt)}
+  .answer{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:none}
   .answer.show{display:block}
   .answer .label{color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;display:flex;gap:10px;align-items:center}
   .answer .text{font-size:18px;line-height:1.55}
   .badge{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:2px 8px}
-  #clip{display:none;margin-top:16px}
-  #player{width:100%;max-height:420px;border-radius:12px;background:#000;display:block}
-  .cliplabel{color:var(--accent2);font-size:13px;margin-bottom:6px}
-  .gridhint{color:var(--muted);font-size:12px;margin-top:18px}
-  .grid{margin-top:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;transition:border-color .15s}
-  .card:hover{border-color:var(--accent)}
-  .card .play{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;font-size:11px;padding:2px 7px}
-  .card .thumb{position:relative}
-  .card img{width:100%;height:150px;object-fit:cover;background:#000;display:block}
-  .card .meta{padding:10px 12px}
-  .card .cam{font-weight:600;font-size:13px}
-  .card .tc{color:var(--accent2);font-size:12px}
-  .card .sum{color:var(--muted);font-size:12px;margin-top:6px;max-height:54px;overflow:hidden}
-  .card .score{float:right;color:var(--muted);font-size:11px}
-  .muted{color:var(--muted)}
-  .err{color:var(--warn)}
+  .cites{margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+  .cite{background:#0e141b;border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer}
+  .cite:hover{border-color:var(--accent)} .cite img{width:100%;height:120px;object-fit:cover;background:#000;display:block}
+  .cite .m{padding:8px 10px} .cite .c{font-weight:600;font-size:13px} .cite .tc{color:var(--accent2);font-size:12px}
+  .cite .su{color:var(--muted);font-size:12px;margin-top:4px;max-height:48px;overflow:hidden}
+  .muted{color:var(--muted)} .err{color:var(--warn)}
 </style>
 </head>
 <body>
 <header>
   <div class="logo"></div>
-  <div>
-    <h1>eyebrain</h1>
-    <div class="sub">talk to your cameras &middot; on-device video search</div>
-  </div>
+  <h1>eyebrain</h1>
   <div class="status" id="status">loading…</div>
 </header>
 <main>
@@ -74,85 +80,111 @@ INDEX_HTML = r"""<!doctype html>
       </svg>
     </button>
   </form>
-  <div class="hint" id="hint">Tap the mic and ask — or type and press Enter.</div>
+
+  <div class="tabs" id="tabs"></div>
 
   <div class="answer" id="answer">
-    <div class="label">Answer <span class="badge" id="synth"></span> <button class="ghost" id="replay" style="padding:2px 10px;font-size:12px">🔊 replay</button></div>
+    <div class="label">Answer <span class="badge" id="synth"></span> <button class="ghost" id="replay">🔊 replay</button></div>
     <div class="text" id="answerText"></div>
-    <div id="clip">
-      <div class="cliplabel" id="clipLabel"></div>
-      <video id="player" controls playsinline preload="auto"></video>
-    </div>
-    <div class="gridhint" id="gridhint"></div>
-    <div class="grid" id="grid"></div>
+    <div class="cites" id="cites"></div>
   </div>
+
+  <div id="view"></div>
 </main>
 <script>
 const $=s=>document.querySelector(s);
-async function loadStatus(){
-  try{const r=await fetch("/api/cameras");const d=await r.json();
-    $("#status").innerHTML=`${d.cameras.length} cameras &middot; ${d.indexed_moments} moments &middot; ${d.powered_by||"on-device"}`;
-  }catch(e){$("#status").textContent="offline";}
-}
-// Clip player: load a camera's video and seek to a cited timecode.
-function seekTo(cam, t, label){
-  const player=$("#player");
-  $("#clip").style.display="block";
-  $("#clipLabel").textContent="▶ "+(label||"");
-  const url="/api/video/"+encodeURIComponent(cam);
-  const go=()=>{ try{player.currentTime=Math.max(0,t);}catch(e){} player.play().catch(()=>{}); };
-  if(player.dataset.cam!==cam){
-    player.dataset.cam=cam; player.src=url; player.load();
-    player.onloadeddata=go;
-  } else { go(); }
-}
-let curAudio=null;
-function speakBrowser(text){
-  try{window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=1.05;window.speechSynthesis.speak(u);}catch(e){}
-}
-async function speak(text){
-  // Prefer MiniMax TTS (sponsor); fall back to browser speech if unavailable.
-  try{
-    if(curAudio){curAudio.pause();curAudio=null;}
-    const r=await fetch("/api/tts?text="+encodeURIComponent(text));
-    if(!r.ok) throw new Error("tts "+r.status);
-    const blob=await r.blob();
-    curAudio=new Audio(URL.createObjectURL(blob));
-    await curAudio.play();
-  }catch(e){ speakBrowser(text); }
-}
+const state={cameras:[],active:"all"};
 let lastAnswer="";
+
+async function init(){
+  try{
+    const d=await (await fetch("/api/cameras")).json();
+    state.cameras=d.cameras||[];
+    $("#status").innerHTML=`${state.cameras.length} cameras &middot; ${d.indexed_moments} moments &middot; ${d.powered_by||"on-device"}`;
+  }catch(e){ $("#status").textContent="offline"; }
+  renderTabs(); show("all"); setupMic();
+}
+function renderTabs(){
+  const t=$("#tabs"); t.innerHTML="";
+  const mk=(id,label)=>{const b=document.createElement("div");b.className="tab"+(state.active===id?" on":"");b.textContent=label;b.onclick=()=>show(id);return b;};
+  t.appendChild(mk("all","◢ All cameras"));
+  state.cameras.forEach(c=>t.appendChild(mk(c.camera_id,c.camera_name)));
+}
+function show(id){
+  state.active=id; renderTabs();
+  $("#q").placeholder = id==="all" ? "Ask across all cameras…" : `Ask the ${camName(id)} camera…`;
+  if(id==="all") renderAll(); else renderSingle(id);
+}
+function camName(id){const c=state.cameras.find(x=>x.camera_id===id);return c?c.camera_name:id;}
+
+function renderAll(){
+  const v=$("#view");
+  v.innerHTML='<div class="grid" id="grid"></div>';
+  state.cameras.forEach(c=>{
+    const el=document.createElement("div");el.className="cam";
+    el.innerHTML=`<div class="ph"><img src="/api/frame?camera=${encodeURIComponent(c.camera_id)}&t=0" loading="lazy"/>
+      <span class="liveband"><span class="dot"></span>${c.camera_name}</span></div>
+      <div class="nm">${c.camera_name}<small>click to view &amp; ask</small></div>`;
+    el.onclick=()=>show(c.camera_id);
+    $("#grid").appendChild(el);
+  });
+}
+
+async function renderSingle(cam){
+  const v=$("#view");
+  v.innerHTML=`<div class="single">
+      <div><video id="player" controls playsinline preload="auto" src="/api/video/${encodeURIComponent(cam)}"></video></div>
+      <div><div class="panelttl">${camName(cam)} — script</div><div class="script" id="script">loading…</div></div>
+    </div>`;
+  try{
+    const d=await (await fetch("/api/moments?camera="+encodeURIComponent(cam))).json();
+    const s=$("#script"); s.innerHTML="";
+    if(!d.moments.length){s.innerHTML='<div class="muted" style="padding:10px">no moments</div>';return;}
+    d.moments.forEach(m=>{
+      const row=document.createElement("div");row.className="ev";
+      row.innerHTML=`<span class="t">${m.time_range}</span><span class="s">${m.summary}</span>`;
+      row.onclick=()=>seek(m.start_sec);
+      s.appendChild(row);
+    });
+  }catch(e){ $("#script").innerHTML='<div class="err" style="padding:10px">failed to load script</div>'; }
+}
+function seek(t){const p=$("#player");if(!p)return;try{p.currentTime=Math.max(0,t);}catch(e){}p.play().catch(()=>{});}
+
+let curAudio=null;
+function speakBrowser(t){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.05;speechSynthesis.speak(u);}catch(e){}}
+async function speak(t){
+  try{if(curAudio){curAudio.pause();curAudio=null;}
+    const r=await fetch("/api/tts?text="+encodeURIComponent(t));if(!r.ok)throw 0;
+    curAudio=new Audio(URL.createObjectURL(await r.blob()));await curAudio.play();
+  }catch(e){speakBrowser(t);}
+}
+
 async function ask(){
   const q=$("#q").value.trim(); if(!q) return;
   $("#answer").classList.add("show");
-  $("#answerText").innerHTML='<span class="muted">searching cameras…</span>';
-  $("#grid").innerHTML="";$("#synth").textContent="";
+  $("#answerText").innerHTML='<span class="muted">searching…</span>';
+  $("#cites").innerHTML="";$("#synth").textContent="";
+  const body={question:q}; if(state.active!=="all") body.camera=state.active;
   try{
-    const r=await fetch("/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:q})});
-    const d=await r.json();
-    if(!r.ok){$("#answerText").innerHTML=`<span class="err">${d.detail||"error"}</span>`;return;}
-    lastAnswer=d.answer;
-    $("#answerText").textContent=d.answer;
-    $("#synth").textContent=d.synthesis==="llm"?"on-device LLM":(d.synthesis||"");
-    d.citations.forEach(c=>{
-      const card=document.createElement("div");card.className="card";
-      const img=c.thumb_url?`<div class="thumb"><img src="${c.thumb_url}" loading="lazy"/><span class="play">▶ ${c.time_range}</span></div>`:`<div style="height:150px;display:flex;align-items:center;justify-content:center" class="muted">no preview</div>`;
-      card.innerHTML=`${img}<div class="meta"><span class="score">${c.score}</span>
-        <div class="cam">${c.camera_name}</div><div class="tc">${c.time_range}</div>
-        <div class="sum">${c.summary}</div></div>`;
-      card.onclick=()=>seekTo(c.camera_id,c.start_sec,`${c.camera_name} @ ${c.time_range}`);
-      $("#grid").appendChild(card);
+    const d=await (await fetch("/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})).json();
+    lastAnswer=d.answer; $("#answerText").textContent=d.answer;
+    $("#synth").textContent=d.synthesis||"";
+    (d.citations||[]).forEach(c=>{
+      const el=document.createElement("div");el.className="cite";
+      const img=c.thumb_url?`<img src="${c.thumb_url}" loading="lazy"/>`:"";
+      el.innerHTML=`${img}<div class="m"><div class="c">${c.camera_name}</div><div class="tc">${c.time_range}</div><div class="su">${c.summary}</div></div>`;
+      el.onclick=()=>openAt(c.camera_id,c.start_sec);
+      $("#cites").appendChild(el);
     });
-    // Jump the player to the top cited moment ("when did it happen").
-    if(d.citations.length){
-      const t=d.citations[0];
-      seekTo(t.camera_id,t.start_sec,`${t.camera_name} @ ${t.time_range}`);
-      $("#gridhint").textContent="Other matching moments (click any clip to jump the video):";
-    } else { $("#clip").style.display="none"; $("#gridhint").textContent=""; }
+    if(d.citations&&d.citations.length){const t=d.citations[0];openAt(t.camera_id,t.start_sec);}
     speak(d.answer);
-  }catch(e){$("#answerText").innerHTML=`<span class="err">request failed: ${e}</span>`;}
+  }catch(e){ $("#answerText").innerHTML='<span class="err">request failed</span>'; }
 }
-// Web Speech API mic (zero-key voice input)
+function openAt(cam,t){
+  if(state.active!==cam){ show(cam); setTimeout(()=>seek(t),350); }
+  else seek(t);
+}
+
 let rec=null;
 function setupMic(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -164,7 +196,7 @@ function setupMic(){
 }
 $("#askForm").addEventListener("submit",e=>{e.preventDefault();ask();});
 $("#replay").onclick=()=>lastAnswer&&speak(lastAnswer);
-loadStatus();setupMic();
+init();
 </script>
 </body>
 </html>
