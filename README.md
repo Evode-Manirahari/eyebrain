@@ -112,28 +112,15 @@ Everything in this repo was built during the event. Highlights:
 
 ## 6. Honest feedback on the tools
 
-### Qwen2.5-VL (via Ollama)
-- **Did well:** genuinely good on-device captioning for a 3B model — it read a name badge, identified a Coca-Cola can, a backpack, and "head resting on the table." OpenAI-style image input via Ollama just worked.
-- **Could be better:** (1) **Counting/state errors** — it called 3 people "two," and "head down asleep" read as "sitting." (2) **Hallucinates on fast motion** — labeled walking as "skateboarding" and a backpack as "a suitcase." (3) **Verbose, repetitive captions** — every frame trails into "…in an indoor setting with orange acoustic panels on the walls," which buries the actual action and makes naive de-dup collapse distinct events. (4) **7B is the obvious accuracy fix but unusable on a CPU** (~tens of seconds/frame on this Intel Mac) — the real lesson is this *wants* a GPU or Apple Silicon at the edge.
+**Qwen2.5-VL (Ollama)** — Strong on-device captioning for a 3B (read a name badge, a Coca-Cola can, a backpack). But it miscounts (3 people → "two"), mislabels fast motion (walking → "skateboarding"), and pads every caption with venue boilerplate. The 7B fixes accuracy but is unusably slow on CPU — this wants a GPU / Apple-Silicon edge.
 
-### Moss
-- **Did well:** the local-first model is exactly right for this use case — **~13ms warm hybrid search**, and the privacy story ("only compact text leaves the camera") maps perfectly onto a "central server."
-- **Bugs / friction we hit:**
-  - **No `macosx_x86_64` wheel** for the native core (`inferedge-moss-core`) — `pip install moss` is *unsatisfiable* on an Intel Mac (arm64-mac, Linux-x86_64, and win wheels only). We had to run Moss in a **Linux container sidecar**. Query also requires the in-memory native runtime (no cloud query endpoint), so there's no pure-HTTP escape hatch.
-  - **One shared client is mandatory.** Creating a `MossClient` per request 500s after the first query — `load_index` state lives on the client, so a fresh client queries an unloaded runtime. A note in the docs would save hours.
-  - **Free-tier quota is easy to burn.** "60 monthly units" (oddly labeled "voice minutes") — our dev loop (`create_index`/`delete_index` on every re-sync, plus test queries) **exhausted it**, returning `429 USAGE_LIMIT_EXCEEDED`. A clearer quota meter + a "this op costs N units" hint would help a lot during iteration.
-  - **Transient 503s** on the free tier — we added retry-with-backoff; the local fallback covers the rest.
+**Moss** — ~13ms warm hybrid search; local-first model fits the privacy story perfectly. Friction: **no `macosx_x86_64` wheel** (`pip install moss` is unsatisfiable on Intel Mac → we ran it in a Linux sidecar; query needs the native runtime, no HTTP fallback); you **must reuse one `MossClient`** (a per-request client 500s after the first query); and the free **60-units/mo** quota burns fast (re-syncs → `429 USAGE_LIMIT_EXCEEDED`). A quota meter + per-op cost hint would help.
 
-### MiniMax
-- **Did well:** the intl `t2a_v2` endpoint authenticates with **just an API key** (no Group ID), and the English voices sound great — drop-in for a polished spoken answer.
-- **Could be better:** the response is **hex-encoded audio inside JSON** (not raw bytes or a URL), which is an unusual shape to discover; one line in the quickstart would help. Voice-id naming is also a bit opaque.
+**MiniMax** — `t2a_v2` authenticates with **just an API key** (no Group ID) and the English voices sound great. One gotcha: audio comes back **hex-encoded inside JSON** — a line in the quickstart would save the discovery.
 
-### LiveKit
-- **Did well:** the Agents framework is clean; the worker registered with Cloud immediately, and routing STT/TTS through **LiveKit Inference** meant no extra provider keys.
-- **Could be better:** (1) The agent `entrypoint` **must be a module-level function** — dev mode forks workers and imports it by qualified name, so a nested closure fails with `Can't get local object`. Easy to hit, not obvious. (2) Running the agent's reasoning LLM **on-device (CPU) is too slow** for snappy turn-taking — for a real-time voice loop you really want a fast (cloud-inference) LLM and keep the heavy lifting in tools.
+**LiveKit** — Clean Agents framework; the worker registered instantly and LiveKit Inference meant no extra STT/TTS keys. Two gotchas: the `entrypoint` **must be module-level** (dev mode forks + imports it by name), and an on-device CPU LLM is too slow for snappy turns — use a fast inference LLM, keep logic in tools.
 
-### Environment (Intel i9 Mac — the through-line)
-Almost every sharp edge traced back to **CPU-only, x86_64-macOS**: no Moss wheel, slow Qwen, the broken Homebrew `ollama` formula (missing `llama-server` → use the cask), and OpenCV using **AVFoundation not ffmpeg** (the `mp4v` fourcc fails to write — use `avc1`). On Apple Silicon or Linux+GPU, most of this evaporates. We leaned into it: the design assumes a modest edge device and keeps the live path off the slow model.
+**Environment (Intel i9 Mac)** — Most sharp edges were CPU-only / x86_64-macOS: no Moss wheel, slow Qwen, the broken Homebrew `ollama` (use the cask), OpenCV on AVFoundation (`avc1`, not `mp4v`). On Apple-Silicon / Linux+GPU, most of this vanishes.
 
 ---
 
