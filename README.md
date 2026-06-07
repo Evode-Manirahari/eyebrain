@@ -4,7 +4,7 @@
 
 Built at the **Conversational AI Hackathon @ Y Combinator** (#MossHack) — **Qwen · Moss · MiniMax · LiveKit**.
 
-🌐 Runs fully local · 🎥 Demo: **[eyebrain — AI Voice Agent for Security Cameras | #MossHack @ YC](YOUR_YOUTUBE_LINK_HERE)** · 💻 Repo: https://github.com/Evode-Manirahari/eyebrain
+🌐 Runs fully local · 🎥 Demo: **[eyebrain — AI Voice Agent for Security Cameras | #MossHack @ YC](https://www.youtube.com/watch?v=yCXA9VVhuXQ)** · 💻 Repo: https://github.com/Evode-Manirahari/eyebrain
 
 ---
 
@@ -32,7 +32,7 @@ It's not a chatbot over a transcript. It's the real loop: on-device vision, mult
 
 ## 2. Demo video (~60s)
 
-**▶️ [Watch the demo](YOUR_YOUTUBE_LINK_HERE)**
+**▶️ [Watch the demo](https://www.youtube.com/watch?v=yCXA9VVhuXQ)**
 
 Run of show: all-cameras grid → drop a backpack on the Front Desk camera → ask by voice → spoken cited answer + the video jumps to the moment → switch cameras and ask again.
 
