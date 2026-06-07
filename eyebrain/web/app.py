@@ -29,6 +29,24 @@ _registry = CameraRegistry.load()
 class AskRequest(BaseModel):
     question: str
     top_k: int | None = None
+    camera: str | None = None  # scope the question to one camera (single-camera view)
+
+
+class _Scoped:
+    """Wrap a retriever to return results from one camera only (over-fetch then filter)."""
+
+    name = "scoped"
+
+    def __init__(self, inner, camera: str) -> None:
+        self.inner = inner
+        self.camera = camera
+
+    def search(self, question: str, top_k: int = 5, min_score: float | None = None):
+        res = self.inner.search(question, top_k=max(top_k * 5, 60), min_score=min_score)
+        return [r for r in res if r.moment.camera_id == self.camera][:top_k]
+
+    def count(self) -> int:
+        return self.inner.count()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -48,14 +66,32 @@ def cameras() -> JSONResponse:
     )
 
 
+@app.get("/api/moments")
+def moments(camera: str = Query(...)) -> JSONResponse:
+    """A camera's 'script' — its caption timeline, in time order."""
+    from ..index import MomentIndex
+
+    ms = [m for m in MomentIndex().load() if m.camera_id == camera]
+    ms.sort(key=lambda m: m.start_sec)
+    return JSONResponse(
+        {
+            "camera": camera,
+            "moments": [
+                {"time_range": m.time_range, "start_sec": m.start_sec, "summary": m.summary}
+                for m in ms
+            ],
+        }
+    )
+
+
 @app.post("/api/ask")
 def ask(req: AskRequest) -> JSONResponse:
     question = req.question.strip()
     if not question:
         raise HTTPException(400, "empty question")
-    # answer_query handles duration ('how long') queries + normal cited answers,
-    # and returns the moment set the answer used so citations match.
-    answer, results = answer_query(_retriever, question, req.top_k or TOP_K)
+    # Scope to one camera if the single-camera view asked; else search across all.
+    retr = _Scoped(_retriever, req.camera) if req.camera else _retriever
+    answer, results = answer_query(retr, question, req.top_k or TOP_K)
 
     citations = []
     for r in results:
