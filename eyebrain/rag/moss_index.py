@@ -79,7 +79,8 @@ class MossIndex:
     def clear(self) -> None:
         requests.post(f"{self.url}/clear", timeout=self.timeout).raise_for_status()
 
-    def search(self, question: str, top_k: int = 5) -> list[QueryResult]:
+    def search(self, question: str, top_k: int = 5, min_score: float | None = None) -> list[QueryResult]:
+        # min_score is a local-index concept; Moss does its own relevance scoring.
         r = requests.post(
             f"{self.url}/query",
             json={"text": question, "top_k": top_k, "alpha": _DEFAULT_ALPHA},

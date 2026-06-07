@@ -35,23 +35,32 @@ def is_narrative_query(question: str) -> bool:
     return bool(_NARRATIVE_RE.search(question or ""))
 
 
-# Scene-description tails the VLM appends; we cut at the first one to keep the core action.
-_TAIL_CONNECTORS = (
-    " in front of", " with ", " while ", " near ", " behind ", " above ", " below ",
-    " that reads", " that says", " in the background", " on the wall", " indoors",
-    " in an indoor", " in a indoor", " with a sign",
+# Venue/scene boilerplate the VLM repeats on every frame. We STRIP it (keeping the action,
+# which often trails at the end like "…, working on a laptop") so distinct events read
+# clearly and don't collapse into "a person sitting at a table" over and over.
+_NOISE_RE = re.compile(
+    r"(?:\bin (?:an?|the) (?:indoor|office|orange[- ]?walled|empty|dining)[\w\- ]*?"
+    r"(?:setting|space|hallway|room|area|dining area)\b"
+    r"|(?:with|featuring)[\w ]*?(?:acoustic|soundproofing)[\w ]*?panels[\w ]*?(?:on the walls)?"
+    r"(?:\s+and\s+(?:white\s+)?ceiling[\w ]*)?"
+    r"|(?:and\s+)?(?:white\s+)?ceiling (?:lights|tiles)[\w ]*"
+    r"|with (?:orange\s+)?(?:white\s+)?tables and chairs[\w ]*"
+    r"|in front of an orange wall[\w ]*"
+    r"|on the walls(?:\s+and ceiling)?"
+    r"|arranged (?:in rows|neatly|around[\w ]*))",
+    re.I,
 )
 
 
 def _tidy(summary: str) -> str:
-    """Trim a verbose caption to its core event (plain English)."""
-    s = summary.strip().rstrip(".")
-    low = s.lower()
-    cuts = [low.find(c) for c in _TAIL_CONNECTORS]
-    cuts = [c for c in cuts if c > 8]  # keep at least the subject+verb
-    if cuts:
-        s = s[: min(cuts)]
-    return s.strip()
+    """Strip repeated venue boilerplate, keep the action; return plain English."""
+    s = _NOISE_RE.sub("", summary)
+    s = re.sub(r"\s+lights\s+(?:above|hanging[\w ]*)", "", s, flags=re.I)  # dangling "lights above"
+    s = re.sub(r"\s*,\s*,", ",", s)            # ", ,"
+    s = re.sub(r"\s{2,}", " ", s)              # double spaces
+    s = re.sub(r"\s+([,.])", r"\1", s)         # space before punct
+    s = s.strip().strip(",").strip().rstrip(".")
+    return s
 
 
 def _similar(a: str, b: str) -> bool:
@@ -128,7 +137,9 @@ def narrative_answer(question: str, results: list[QueryResult]) -> tuple[CitedAn
     chronological story (first -> then -> finally), collapsing repeated frames."""
     if not results:
         return build_cited_answer(question, results), results
-    cam_id, _, _, span = _span(results, cutoff_ratio=0.45)  # looser: capture the sequence
+    # Narrate the top camera's FULL timeline (cutoff 0) so the whole arc shows — not just
+    # the frames most relevant to the query (which would clip the ending).
+    cam_id, _, _, span = _span(results, cutoff_ratio=0.0)
     seq = _dedupe_sequence(sorted(span, key=lambda r: r.moment.start_sec))
     cam = seq[0].moment.camera_name or cam_id
 
@@ -163,7 +174,9 @@ def answer_query(retriever, question: str, top_k: int = 5) -> tuple[CitedAnswer,
     if is_duration_query(question):
         return duration_answer(question, retriever.search(question, top_k=50))
     if is_narrative_query(question):
-        return narrative_answer(question, retriever.search(question, top_k=50))
+        # min_score=0 so the FULL camera timeline is available (weak-but-temporal frames
+        # like 'using laptop' aren't filtered out of the story).
+        return narrative_answer(question, retriever.search(question, top_k=80, min_score=0.0))
     results = retriever.search(question, top_k=top_k)
     return answer_for(question, results), results
 

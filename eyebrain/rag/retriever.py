@@ -26,8 +26,10 @@ class LocalRetriever:
         self.name = f"local-{embedder_name}"
         self._index = MomentIndex(embedder=make_embedder(embedder_name))
 
-    def search(self, question: str, top_k: int = 5) -> list[QueryResult]:
-        return self._index.search(question, top_k=top_k)
+    def search(self, question: str, top_k: int = 5, min_score: float | None = None) -> list[QueryResult]:
+        if min_score is None:
+            return self._index.search(question, top_k=top_k)
+        return self._index.search(question, top_k=top_k, min_score=min_score)
 
     def count(self) -> int:
         return len(self._index.load())
@@ -44,14 +46,14 @@ class ResilientRetriever:
         self.primary = primary
         self.fallback = fallback
 
-    def search(self, question: str, top_k: int = 5) -> list[QueryResult]:
+    def search(self, question: str, top_k: int = 5, min_score: float | None = None) -> list[QueryResult]:
         try:
-            res = self.primary.search(question, top_k=top_k)
+            res = self.primary.search(question, top_k=top_k, min_score=min_score)
             if res:
                 return res
         except Exception as exc:
             print(f"[eyebrain] Moss query failed ({exc}); using local fallback.", file=sys.stderr)
-        return self.fallback.search(question, top_k=top_k)
+        return self.fallback.search(question, top_k=top_k, min_score=min_score)
 
     def count(self) -> int:
         try:
