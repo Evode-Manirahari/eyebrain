@@ -166,11 +166,29 @@ def narrative_answer(question: str, results: list[QueryResult]) -> tuple[CitedAn
     return ca, seq
 
 
+def _not_found(question: str) -> CitedAnswer:
+    return CitedAnswer(
+        question=question,
+        answer="I didn't see anything matching that across the cameras. Try asking about a "
+        "person, an object, or something that happened.",
+        citations=[],
+        metadata={"synthesis": "not_found", "result_count": 0},
+    )
+
+
 def answer_query(retriever, question: str, top_k: int = 5) -> tuple[CitedAnswer, list[QueryResult]]:
     """Top-level entry for web/voice. Routes by intent:
     - 'how long' -> duration span; 'what happened / what did X do' -> chronological
     narrative; otherwise the instant single-moment cited answer. Returns (answer, results)
-    so the caller renders citations from the same moments the answer used."""
+    so the caller renders citations from the same moments the answer used.
+
+    First a confidence gate: if even the best match is weak, say 'I didn't see that' rather
+    than return an irrelevant moment — so out-of-scope probes don't produce non-answers."""
+    floor = float(os.getenv("EYEBRAIN_ANSWER_FLOOR", "0.55"))
+    probe = retriever.search(question, top_k=1, min_score=0.0)
+    if not probe or probe[0].score < floor:
+        return _not_found(question), []
+
     if is_duration_query(question):
         return duration_answer(question, retriever.search(question, top_k=50))
     if is_narrative_query(question):
