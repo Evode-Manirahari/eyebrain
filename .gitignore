@@ -1,0 +1,17 @@
+.DS_Store
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Keep raw footage and generated local indexes off GitHub by default.
+data/videos/
+data/frames/
+data/index/
+
+.gstack/
