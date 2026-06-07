@@ -1,5 +1,5 @@
 """Retriever factory: choose the Moss runtime (sponsor, on-device-capable) or the local
-fastembed store (offline fallback). Both expose `search(question, top_k) -> list[QueryResult]`
+local store (offline fallback). Both expose `search(question, top_k) -> list[QueryResult]`
 and `count() -> int`, so the web and voice layers don't care which is active.
 
 Select with EYEBRAIN_RETRIEVER=moss|local (default: local). Moss requires MOSS_PROJECT_ID /
@@ -19,10 +19,12 @@ from ..models import QueryResult
 class LocalRetriever:
     """Adapter over Codex's MomentIndex giving the common retriever interface."""
 
-    name = "local-fastembed"
+    name = "local"
 
     def __init__(self) -> None:
-        self._index = MomentIndex(embedder=make_embedder(os.getenv("EYEBRAIN_EMBEDDER", "fastembed")))
+        embedder_name = os.getenv("EYEBRAIN_EMBEDDER", "hash")
+        self.name = f"local-{embedder_name}"
+        self._index = MomentIndex(embedder=make_embedder(embedder_name))
 
     def search(self, question: str, top_k: int = 5) -> list[QueryResult]:
         return self._index.search(question, top_k=top_k)

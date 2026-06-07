@@ -10,7 +10,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import cv2
 from fastapi import HTTPException
 from fastapi.responses import Response, StreamingResponse
 
@@ -29,6 +28,11 @@ def ensure_web_mp4(src_path: str) -> Path:
     out = src.with_suffix(".web.mp4")
     if out.exists() and out.stat().st_mtime >= src.stat().st_mtime:
         return out
+
+    try:
+        import cv2
+    except ImportError as exc:
+        raise HTTPException(503, "OpenCV is required to transcode non-mp4 footage; install eyebrain[vision]") from exc
 
     cap = cv2.VideoCapture(str(src))
     if not cap.isOpened():

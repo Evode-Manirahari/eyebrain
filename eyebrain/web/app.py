@@ -10,7 +10,6 @@ from __future__ import annotations
 import io
 import os
 
-import cv2
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
@@ -44,6 +43,7 @@ def cameras() -> JSONResponse:
             "cameras": [c.model_dump() for c in _registry.cameras.values()],
             "indexed_moments": _retriever.count(),
             "retriever": getattr(_retriever, "name", "unknown"),
+            "powered_by": "Moss + on-device fallback" if getattr(_retriever, "name", "").startswith("moss") else "On-device",
         }
     )
 
@@ -113,6 +113,11 @@ def video(camera: str, request: Request) -> Response:
 @app.get("/api/frame")
 def frame(camera: str = Query(...), t: float = Query(0.0)) -> Response:
     """Extract a single JPEG from the local source video at time `t` (seconds)."""
+    try:
+        import cv2
+    except ImportError as exc:
+        raise HTTPException(503, "OpenCV is required for frame extraction; install eyebrain[vision]") from exc
+
     entry = _registry.get(camera)
     if entry is None:
         raise HTTPException(404, f"camera {camera} not registered")

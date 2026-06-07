@@ -9,8 +9,11 @@ setup:  ## install all extras for the demo
 ollama:  ## start the on-device model server (official app binary)
 	/Applications/Ollama.app/Contents/Resources/ollama serve
 
-web:  ## launch the demo web UI at http://127.0.0.1:8000
-	. $(VENV) && EYEBRAIN_EMBEDDER=fastembed python -m eyebrain.web.app
+web:  ## launch the demo (Moss-powered retrieval, on-device fallback) at :8000
+	. $(VENV) && EYEBRAIN_RETRIEVER=moss EYEBRAIN_EMBEDDER=fastembed python -m eyebrain.web.app
+
+web-local:  ## launch the demo on pure on-device retrieval (no Moss dependency)
+	. $(VENV) && EYEBRAIN_RETRIEVER=local EYEBRAIN_EMBEDDER=fastembed python -m eyebrain.web.app
 
 ask:  ## one-off CLI query: make ask Q="When did the display get knocked over?"
 	. $(VENV) && eyebrain ask "$(Q)" --embedder fastembed --top-k 5
