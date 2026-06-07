@@ -40,7 +40,8 @@ def ensure_web_mp4(src_path: str) -> Path:
     fps = cap.get(cv2.CAP_PROP_FPS) or 20.0
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    vw = cv2.VideoWriter(str(out), cv2.VideoWriter_fourcc(*"avc1"), fps, (w, h))
+    fourcc = cv2.VideoWriter_fourcc(*"avc1")  # type: ignore[attr-defined]
+    vw = cv2.VideoWriter(str(out), fourcc, fps, (w, h))
     if not vw.isOpened():
         cap.release()
         raise HTTPException(500, "avc1 transcode writer failed to open")
