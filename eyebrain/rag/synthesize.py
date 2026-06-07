@@ -11,10 +11,72 @@ web and voice layers can swap synthesizers without caring which one ran."""
 from __future__ import annotations
 
 import os
+import re
 
 from .. import config
-from ..models import Citation, CitedAnswer, QueryResult
+from ..models import Citation, CitedAnswer, QueryResult, format_seconds
 from .answer import build_cited_answer
+
+_DURATION_RE = re.compile(
+    r"\b(how long|how much time|for how long|duration|how many (seconds|minutes))\b", re.I
+)
+
+
+def is_duration_query(question: str) -> bool:
+    return bool(_DURATION_RE.search(question or ""))
+
+
+def _span(results: list[QueryResult]):
+    """Pick the top camera and the contiguous run of relevant moments, and return the
+    time span they cover. Used to answer 'how long was X there?'."""
+    top = results[0]
+    cam_id = top.moment.camera_id
+    cutoff = max(0.0, top.score * 0.65)  # relative relevance gate
+    span = [r for r in results if r.moment.camera_id == cam_id and r.score >= cutoff]
+    if not span:
+        span = [top]
+    span.sort(key=lambda r: r.moment.start_sec)
+    start = min(r.moment.start_sec for r in span)
+    end = max(r.moment.end_sec for r in span)
+    return cam_id, start, end, span
+
+
+def _fmt_duration(seconds: float) -> str:
+    s = max(0, round(seconds))
+    if s < 60:
+        return f"{s} seconds"
+    m, s = divmod(s, 60)
+    return f"{m} min {s} sec" if s else f"{m} min"
+
+
+def duration_answer(question: str, results: list[QueryResult]) -> tuple[CitedAnswer, list[QueryResult]]:
+    """Answer a 'how long' question by measuring the span the subject is present."""
+    if not results:
+        return build_cited_answer(question, results), results
+    cam_id, start, end, span = _span(results)
+    cam = span[0].moment.camera_name or cam_id
+    answer = (
+        f"On the {cam} camera, it was there for about {_fmt_duration(end - start)}, "
+        f"from {format_seconds(start)} to {format_seconds(end)}."
+    )
+    ca = CitedAnswer(
+        question=question,
+        answer=answer,
+        citations=[Citation.from_result(r) for r in span],
+        metadata={"synthesis": "duration", "result_count": len(span), "seconds": round(end - start)},
+    )
+    return ca, span
+
+
+def answer_query(retriever, question: str, top_k: int = 5) -> tuple[CitedAnswer, list[QueryResult]]:
+    """Top-level entry for web/voice: handles 'how long' (duration) queries specially,
+    otherwise returns the normal fast/LLM cited answer. Returns (answer, results) so the
+    caller can render citations from the same moment set the answer used."""
+    if is_duration_query(question):
+        wide = retriever.search(question, top_k=50)  # need the full run, not just top-k
+        return duration_answer(question, wide)
+    results = retriever.search(question, top_k=top_k)
+    return answer_for(question, results), results
 
 SYSTEM_PROMPT = (
     "You are eyebrain, an assistant that answers questions about security-camera footage. "

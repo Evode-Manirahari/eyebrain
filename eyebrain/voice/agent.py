@@ -19,7 +19,7 @@ import os
 
 from ..config import LLM_MODEL, OLLAMA_HOST, TOP_K
 from ..rag.retriever import make_retriever
-from ..rag.synthesize import answer_for
+from ..rag.synthesize import answer_query
 
 INSTRUCTIONS = (
     "You are eyebrain, a voice assistant for searching security-camera footage. "
@@ -67,8 +67,8 @@ async def entrypoint(ctx) -> None:
         async def search_footage(self, context: RunContext, question: str) -> str:
             """Search all security cameras for moments relevant to the question and return
             a cited answer. Use for any question about what the cameras observed."""
-            results = _retriever.search(question, top_k=TOP_K)
-            return answer_for(question, results).answer
+            answer, _ = answer_query(_retriever, question, TOP_K)
+            return answer.answer
 
     await ctx.connect()
     session = AgentSession(

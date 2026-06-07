@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from ..rag.retriever import make_retriever
-from ..rag.synthesize import answer_for
+from ..rag.synthesize import answer_query
 from .registry import CameraRegistry
 from .ui import INDEX_HTML
 
@@ -53,8 +53,9 @@ def ask(req: AskRequest) -> JSONResponse:
     question = req.question.strip()
     if not question:
         raise HTTPException(400, "empty question")
-    results = _retriever.search(question, top_k=req.top_k or TOP_K)
-    answer = answer_for(question, results)  # EYEBRAIN_SYNTH=fast (default) | llm
+    # answer_query handles duration ('how long') queries + normal cited answers,
+    # and returns the moment set the answer used so citations match.
+    answer, results = answer_query(_retriever, question, req.top_k or TOP_K)
 
     citations = []
     for r in results:
