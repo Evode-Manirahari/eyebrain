@@ -26,7 +26,16 @@ Under the hood it's a **distributed, multi-camera video-RAG system**:
 
 It's not a chatbot over a transcript. It's the real loop: on-device vision, multi-camera retrieval, three query modes (single-moment / duration / narrative), a confidence gate that refuses to make things up, and a resilient retriever that never breaks the demo.
 
-> **Privacy is the architecture, not a feature.** The central index stores summaries, embeddings, camera IDs and timestamps — never raw frames.
+> **Privacy is the architecture, not a feature.**
+
+**Privacy boundary — the central index persists *only*:**
+- camera ID + optional camera name
+- timestamp range
+- caption summary + tags
+- the compact embedding vector
+- a non-sensitive source reference (a hash, not a path)
+
+**Never written to the index:** raw video, frames, image bytes, or file paths. The footage stays on the camera node; the only thing that travels is text. (Frames shown in the UI are pulled on demand from the *local* video — they're never centralized.)
 
 ---
 
