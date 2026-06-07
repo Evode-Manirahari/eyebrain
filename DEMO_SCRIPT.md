@@ -19,9 +19,9 @@ Sponsors are marked **like this** — swap/confirm as needed.
 
 **0:39** — `[SPEAK INTO THE MIC]` *"What happened at the front desk?"* — and eyebrain answers with the exact moment, spoken back by **MiniMax**, over a **LiveKit** voice agent. `[ANSWER PLAYS + VIDEO JUMPS TO THE MOMENT]`
 
-**0:49** — This is low-cost and completely offline-capable. The AI video analytics market is six billion dollars today, and retailers are losing ninety billion to shrink — and seventy-three percent of that is preventable.
+**0:49** — Low-cost, fully offline. A six-billion-dollar market — and ninety billion lost to shrink, most of it preventable.
 
-**0:57** — eyebrain turns passive cameras into something you can talk to. Just ask.
+**0:55** — eyebrain makes your cameras something you can just ask.
 
 ---
 
