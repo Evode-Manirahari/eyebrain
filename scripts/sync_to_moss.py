@@ -36,8 +36,7 @@ def main() -> None:
     if args.reset:
         moss.clear()
     n = moss.add_moments(moments)
-    print(f"Synced {n} moments to Moss index '{moss.index_name}'. "
-          f"Run the app with EYEBRAIN_RETRIEVER=moss.")
+    print(f"Synced {n} moments to Moss. Run the app with EYEBRAIN_RETRIEVER=moss.")
 
 
 if __name__ == "__main__":

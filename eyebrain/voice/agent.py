@@ -52,9 +52,10 @@ def _build_stt():
     return os.getenv("EYEBRAIN_LK_STT", "deepgram/nova-3")  # LiveKit Inference string
 
 
-def build_entrypoint():
-    """Imported lazily so the package imports fine without the voice extra installed."""
-    from livekit import agents
+# NOTE: `entrypoint` must be a MODULE-LEVEL function — LiveKit dev mode forks worker
+# processes and imports it by qualified name, so a nested closure won't work. livekit
+# imports stay inside the function body so `import eyebrain.voice.agent` is light.
+async def entrypoint(ctx) -> None:
     from livekit.agents import Agent, AgentSession, RunContext, function_tool
     from livekit.plugins import openai, silero
 
@@ -67,34 +68,26 @@ def build_entrypoint():
             """Search all security cameras for moments relevant to the question and return
             a cited answer. Use for any question about what the cameras observed."""
             results = _retriever.search(question, top_k=TOP_K)
-            answer = synthesize_cited_answer(question, results)
-            return answer.answer
+            return synthesize_cited_answer(question, results).answer
 
-    async def entrypoint(ctx: agents.JobContext) -> None:
-        await ctx.connect()
-        session = AgentSession(
-            stt=_build_stt(),
-            # On-device LLM via Ollama's OpenAI-compatible API (keeps reasoning on-device).
-            llm=openai.LLM(
-                model=LLM_MODEL,
-                base_url=f"{OLLAMA_HOST}/v1",
-                api_key="ollama",  # Ollama ignores the key
-            ),
-            tts=_build_tts(),
-            vad=silero.VAD.load(),
-        )
-        await session.start(agent=EyebrainAgent(), room=ctx.room)
-        await session.generate_reply(
-            instructions="Greet the caller in one sentence and invite them to ask what the cameras saw."
-        )
-
-    return agents.WorkerOptions(entrypoint_fnc=entrypoint)
+    await ctx.connect()
+    session = AgentSession(
+        stt=_build_stt(),
+        # On-device LLM via Ollama's OpenAI-compatible API (keeps reasoning on-device).
+        llm=openai.LLM(model=LLM_MODEL, base_url=f"{OLLAMA_HOST}/v1", api_key="ollama"),
+        tts=_build_tts(),
+        vad=silero.VAD.load(),
+    )
+    await session.start(agent=EyebrainAgent(), room=ctx.room)
+    await session.generate_reply(
+        instructions="Greet the caller in one sentence and invite them to ask what the cameras saw."
+    )
 
 
 def main() -> None:
     from livekit import agents
 
-    agents.cli.run_app(build_entrypoint())
+    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
 
 
 if __name__ == "__main__":

@@ -59,7 +59,7 @@ async def count() -> dict:
     client = _client()
     try:
         ix = await client.get_index(INDEX)
-        return {"count": int(getattr(ix, "document_count", 0) or 0)}
+        return {"count": int(getattr(ix, "doc_count", 0) or 0)}
     except Exception:
         return {"count": 0}
 

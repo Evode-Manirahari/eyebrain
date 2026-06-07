@@ -38,17 +38,18 @@ class MossIndex:
 
     @staticmethod
     def _to_doc(m: Moment) -> dict:
+        # Moss metadata values must all be strings; _to_moment parses numerics back.
         return {
             "id": m.id,
             "text": m.searchable_text(),
             "metadata": {
                 "camera_id": m.camera_id,
                 "camera_name": m.camera_name or "",
-                "start_sec": m.start_sec,
-                "end_sec": m.end_sec,
+                "start_sec": str(m.start_sec),
+                "end_sec": str(m.end_sec),
                 "summary": m.summary,
                 "tags": ",".join(m.tags),
-                "confidence": m.confidence,
+                "confidence": str(m.confidence),
             },
         }
 
