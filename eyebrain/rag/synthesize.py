@@ -35,6 +35,25 @@ def is_narrative_query(question: str) -> bool:
     return bool(_NARRATIVE_RE.search(question or ""))
 
 
+# Scene-description tails the VLM appends; we cut at the first one to keep the core action.
+_TAIL_CONNECTORS = (
+    " in front of", " with ", " while ", " near ", " behind ", " above ", " below ",
+    " that reads", " that says", " in the background", " on the wall", " indoors",
+    " in an indoor", " in a indoor", " with a sign",
+)
+
+
+def _tidy(summary: str) -> str:
+    """Trim a verbose caption to its core event (plain English)."""
+    s = summary.strip().rstrip(".")
+    low = s.lower()
+    cuts = [low.find(c) for c in _TAIL_CONNECTORS]
+    cuts = [c for c in cuts if c > 8]  # keep at least the subject+verb
+    if cuts:
+        s = s[: min(cuts)]
+    return s.strip()
+
+
 def _similar(a: str, b: str) -> bool:
     """True if two captions are near-duplicates (so we collapse repeated frames)."""
     aw, bw = set(a.lower().split()), set(b.lower().split())
@@ -48,7 +67,7 @@ def _dedupe_sequence(moments: list[QueryResult], cap: int = 6) -> list[QueryResu
     events, not the same frame repeated. Always keeps the last (the outcome)."""
     kept: list[QueryResult] = []
     for r in moments:
-        if kept and _similar(kept[-1].moment.summary, r.moment.summary):
+        if kept and _similar(_tidy(kept[-1].moment.summary), _tidy(r.moment.summary)):
             continue
         kept.append(r)
     if moments and (not kept or kept[-1] is not moments[-1]) and not (
@@ -114,7 +133,7 @@ def narrative_answer(question: str, results: list[QueryResult]) -> tuple[CitedAn
     cam = seq[0].moment.camera_name or cam_id
 
     def phrase(r: QueryResult) -> str:
-        s = r.moment.summary.strip().rstrip(".")
+        s = _tidy(r.moment.summary)
         return (s[0].lower() + s[1:]) if s else s
 
     n = len(seq)
