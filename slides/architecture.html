@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>eyebrain — architecture</title>
+<style>
+  :root{ --bg:#0b0f14; --panel:#121821; --line:#243041; --txt:#e6edf3; --muted:#8b98a5;
+         --accent:#3fd0c9; --accent2:#5b9dff; --warn:#f0a85f; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--txt);
+       font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       display:flex;align-items:center;justify-content:center}
+  .slide{width:1280px;height:720px;padding:48px 56px;display:flex;flex-direction:column;
+         background:radial-gradient(1200px 500px at 80% -10%,rgba(63,208,201,.08),transparent),var(--bg)}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+  .logo{width:34px;height:34px;border-radius:9px;
+        background:radial-gradient(circle at 30% 30%,var(--accent),var(--accent2));
+        box-shadow:0 0 22px rgba(63,208,201,.5)}
+  h1{font-size:26px;letter-spacing:.4px}
+  header .sub{color:var(--muted);font-size:14px;margin-left:2px}
+  .tag{margin-left:auto;color:var(--accent);font-size:13px;border:1px solid var(--line);
+       border-radius:20px;padding:5px 12px}
+
+  /* diagram */
+  .flow{display:flex;align-items:stretch;gap:0;margin:26px 0 8px}
+  .node{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+        padding:16px 18px;flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+  .node .k{font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:1px}
+  .node .t{font-size:17px;font-weight:600}
+  .node .d{font-size:12.5px;color:var(--muted);line-height:1.45}
+  .node.host{border-color:var(--accent);box-shadow:0 0 0 1px rgba(63,208,201,.25),0 0 30px rgba(63,208,201,.12)}
+  .arrow{display:flex;flex-direction:column;align-items:center;justify-content:center;
+         padding:0 14px;color:var(--muted);min-width:120px;text-align:center}
+  .arrow .lab{font-size:11px;line-height:1.3}
+  .arrow .ln{font-size:22px;color:var(--accent2);margin-top:2px}
+  .privacy{color:var(--warn)}
+
+  .loop{margin:14px 0 6px;text-align:center;color:var(--muted);font-size:13px}
+  .loop b{color:var(--txt)}
+
+  ul{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:12px 28px;margin-top:auto}
+  li{display:flex;gap:11px;align-items:flex-start;font-size:14.5px}
+  li .n{flex:none;width:24px;height:24px;border-radius:7px;background:var(--accent);
+        color:#05221f;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+  li b{color:var(--txt)} li span{color:var(--muted)}
+</style>
+</head>
+<body>
+  <div class="slide">
+    <header>
+      <div class="logo"></div>
+      <div>
+        <h1>eyebrain</h1>
+        <div class="sub">talk to your cameras &middot; on-device multi-camera video search</div>
+      </div>
+      <div class="tag">100% on-device &middot; raw video never leaves the node</div>
+    </header>
+
+    <div class="flow">
+      <div class="node">
+        <div class="k">Each camera · local</div>
+        <div class="t">Qwen2.5-VL</div>
+        <div class="d">Captions every sampled frame on the edge — people, objects, actions, incidents.</div>
+      </div>
+      <div class="arrow">
+        <div class="lab privacy">only compact text<br/>(caption + cam + timecode)<br/>— never the video</div>
+        <div class="ln">→</div>
+      </div>
+      <div class="node host">
+        <div class="k">Central node · sponsor</div>
+        <div class="t">Moss</div>
+        <div class="d">Sub-10ms hybrid semantic search across <i>all</i> cameras. Local fastembed fallback.</div>
+      </div>
+      <div class="arrow">
+        <div class="lab">top moments</div>
+        <div class="ln">→</div>
+      </div>
+      <div class="node">
+        <div class="k">Answer · local</div>
+        <div class="t">Qwen2.5 → cited answer</div>
+        <div class="d">Grounded answer with camera + timecode. Measures duration ("how long?").</div>
+      </div>
+      <div class="arrow">
+        <div class="lab">speak + show</div>
+        <div class="ln">→</div>
+      </div>
+      <div class="node">
+        <div class="t">MiniMax voice</div>
+        <div class="d">Speaks the answer; the clip <b>jumps to the exact second</b> and plays.</div>
+      </div>
+    </div>
+
+    <div class="loop">🎤 voice question in via <b>LiveKit</b> / browser &nbsp;→&nbsp; cited answer spoken back &nbsp;·&nbsp; ~10ms retrieval, ~0.3s to answer</div>
+
+    <ul>
+      <li><span class="n">1</span><div><b>On-device by design.</b> <span>Every camera understands what it sees locally; raw footage never leaves the building — privacy is the architecture.</span></div></li>
+      <li><span class="n">2</span><div><b>Moss-powered retrieval.</b> <span>Only compact descriptions are indexed, so semantic search across every camera is instant.</span></div></li>
+      <li><span class="n">3</span><div><b>Just ask, by voice.</b> <span>Natural-language questions in; cited answers out — which camera, what time, what happened.</span></div></li>
+      <li><span class="n">4</span><div><b>Answers that act.</b> <span>Jumps to the exact clip and measures duration — find the moment in seconds, not hours.</span></div></li>
+    </ul>
+  </div>
+</body>
+</html>

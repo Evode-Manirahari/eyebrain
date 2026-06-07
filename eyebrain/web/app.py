@@ -10,13 +10,12 @@ from __future__ import annotations
 import io
 import os
 
-import cv2
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from ..rag.retriever import make_retriever
-from ..rag.synthesize import synthesize_cited_answer
+from ..rag.synthesize import answer_query
 from .registry import CameraRegistry
 from .ui import INDEX_HTML
 
@@ -44,6 +43,7 @@ def cameras() -> JSONResponse:
             "cameras": [c.model_dump() for c in _registry.cameras.values()],
             "indexed_moments": _retriever.count(),
             "retriever": getattr(_retriever, "name", "unknown"),
+            "powered_by": "Moss + on-device fallback" if getattr(_retriever, "name", "").startswith("moss") else "On-device",
         }
     )
 
@@ -53,8 +53,9 @@ def ask(req: AskRequest) -> JSONResponse:
     question = req.question.strip()
     if not question:
         raise HTTPException(400, "empty question")
-    results = _retriever.search(question, top_k=req.top_k or TOP_K)
-    answer = synthesize_cited_answer(question, results)
+    # answer_query handles duration ('how long') queries + normal cited answers,
+    # and returns the moment set the answer used so citations match.
+    answer, results = answer_query(_retriever, question, req.top_k or TOP_K)
 
     citations = []
     for r in results:
@@ -83,9 +84,41 @@ def ask(req: AskRequest) -> JSONResponse:
     )
 
 
+@app.get("/api/tts")
+def tts(text: str = Query(..., min_length=1, max_length=800)) -> Response:
+    """Speak `text` with MiniMax TTS (sponsor). 503 if unconfigured so the UI can fall
+    back to browser speech."""
+    from ..voice import minimax_tts
+
+    if not minimax_tts.is_configured():
+        raise HTTPException(503, "MiniMax TTS not configured")
+    try:
+        audio = minimax_tts.synthesize(text)
+    except minimax_tts.MiniMaxTTSError as exc:
+        raise HTTPException(502, f"TTS failed: {exc}")
+    return Response(content=audio, media_type="audio/mpeg")
+
+
+@app.get("/api/video/{camera}")
+def video(camera: str, request: Request) -> Response:
+    """Stream a camera's footage as browser-playable mp4 (range-enabled for seeking)."""
+    from .video import ensure_web_mp4, serve_with_range
+
+    entry = _registry.get(camera)
+    if entry is None:
+        raise HTTPException(404, f"camera {camera} not registered")
+    mp4 = ensure_web_mp4(entry.video_path)
+    return serve_with_range(mp4, request.headers.get("range"))
+
+
 @app.get("/api/frame")
 def frame(camera: str = Query(...), t: float = Query(0.0)) -> Response:
     """Extract a single JPEG from the local source video at time `t` (seconds)."""
+    try:
+        import cv2
+    except ImportError as exc:
+        raise HTTPException(503, "OpenCV is required for frame extraction; install eyebrain[vision]") from exc
+
     entry = _registry.get(camera)
     if entry is None:
         raise HTTPException(404, f"camera {camera} not registered")

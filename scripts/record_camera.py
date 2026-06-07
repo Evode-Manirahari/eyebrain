@@ -48,10 +48,19 @@ def record(camera_id: str, seconds: float, device: int) -> str:
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
     fps = 20.0  # webcams lie about fps; pin a sane value for the writer
 
-    out_path = str(VIDEO_DIR / f"{camera_id}.mp4")
-    vw = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"avc1"), fps, (w, h))
-    if not vw.isOpened():
-        print("ERROR: could not open H.264 (avc1) writer.", file=sys.stderr)
+    # AVFoundation's H.264 writer is picky about resolution; try a few codecs/containers.
+    vw = None
+    out_path = None
+    for fourcc, ext in [("avc1", ".mp4"), ("mp4v", ".mp4"), ("MJPG", ".avi")]:
+        p = str(VIDEO_DIR / f"{camera_id}{ext}")
+        cand = cv2.VideoWriter(p, cv2.VideoWriter_fourcc(*fourcc), fps, (w, h))
+        if cand.isOpened():
+            vw, out_path = cand, p
+            print(f">>> writer: {fourcc} -> {p}")
+            break
+        cand.release()
+    if vw is None:
+        print("ERROR: no working video writer (avc1/mp4v/MJPG all failed).", file=sys.stderr)
         sys.exit(1)
 
     print(f"\n>>> Recording {camera_id} for {seconds:.0f}s at {w}x{h}. Get ready...")

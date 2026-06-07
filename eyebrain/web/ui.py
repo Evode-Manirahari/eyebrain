@@ -35,8 +35,15 @@ INDEX_HTML = r"""<!doctype html>
   .answer .label{color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;display:flex;gap:10px;align-items:center}
   .answer .text{font-size:18px;line-height:1.55}
   .badge{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:2px 8px}
-  .grid{margin-top:18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  #clip{display:none;margin-top:16px}
+  #player{width:100%;max-height:420px;border-radius:12px;background:#000;display:block}
+  .cliplabel{color:var(--accent2);font-size:13px;margin-bottom:6px}
+  .gridhint{color:var(--muted);font-size:12px;margin-top:18px}
+  .grid{margin-top:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;transition:border-color .15s}
+  .card:hover{border-color:var(--accent)}
+  .card .play{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;font-size:11px;padding:2px 7px}
+  .card .thumb{position:relative}
   .card img{width:100%;height:150px;object-fit:cover;background:#000;display:block}
   .card .meta{padding:10px 12px}
   .card .cam{font-weight:600;font-size:13px}
@@ -67,6 +74,11 @@ INDEX_HTML = r"""<!doctype html>
   <div class="answer" id="answer">
     <div class="label">Answer <span class="badge" id="synth"></span> <button class="ghost" id="replay" style="padding:2px 10px;font-size:12px">🔊 replay</button></div>
     <div class="text" id="answerText"></div>
+    <div id="clip">
+      <div class="cliplabel" id="clipLabel"></div>
+      <video id="player" controls playsinline preload="auto"></video>
+    </div>
+    <div class="gridhint" id="gridhint"></div>
     <div class="grid" id="grid"></div>
   </div>
 </main>
@@ -85,11 +97,35 @@ function renderChips(){
 }
 async function loadStatus(){
   try{const r=await fetch("/api/cameras");const d=await r.json();
-    $("#status").innerHTML=`${d.cameras.length} cameras &middot; ${d.indexed_moments} moments &middot; ${d.retriever}`;
+    $("#status").innerHTML=`${d.cameras.length} cameras &middot; ${d.indexed_moments} moments &middot; ${d.powered_by||"on-device"}`;
   }catch(e){$("#status").textContent="offline";}
 }
-function speak(text){
+// Clip player: load a camera's video and seek to a cited timecode.
+function seekTo(cam, t, label){
+  const player=$("#player");
+  $("#clip").style.display="block";
+  $("#clipLabel").textContent="▶ "+(label||"");
+  const url="/api/video/"+encodeURIComponent(cam);
+  const go=()=>{ try{player.currentTime=Math.max(0,t);}catch(e){} player.play().catch(()=>{}); };
+  if(player.dataset.cam!==cam){
+    player.dataset.cam=cam; player.src=url; player.load();
+    player.onloadeddata=go;
+  } else { go(); }
+}
+let curAudio=null;
+function speakBrowser(text){
   try{window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.rate=1.05;window.speechSynthesis.speak(u);}catch(e){}
+}
+async function speak(text){
+  // Prefer MiniMax TTS (sponsor); fall back to browser speech if unavailable.
+  try{
+    if(curAudio){curAudio.pause();curAudio=null;}
+    const r=await fetch("/api/tts?text="+encodeURIComponent(text));
+    if(!r.ok) throw new Error("tts "+r.status);
+    const blob=await r.blob();
+    curAudio=new Audio(URL.createObjectURL(blob));
+    await curAudio.play();
+  }catch(e){ speakBrowser(text); }
 }
 let lastAnswer="";
 async function ask(){
@@ -106,12 +142,19 @@ async function ask(){
     $("#synth").textContent=d.synthesis==="llm"?"on-device LLM":(d.synthesis||"");
     d.citations.forEach(c=>{
       const card=document.createElement("div");card.className="card";
-      const img=c.thumb_url?`<img src="${c.thumb_url}" loading="lazy"/>`:`<div style="height:150px;display:flex;align-items:center;justify-content:center" class="muted">no preview</div>`;
+      const img=c.thumb_url?`<div class="thumb"><img src="${c.thumb_url}" loading="lazy"/><span class="play">▶ ${c.time_range}</span></div>`:`<div style="height:150px;display:flex;align-items:center;justify-content:center" class="muted">no preview</div>`;
       card.innerHTML=`${img}<div class="meta"><span class="score">${c.score}</span>
         <div class="cam">${c.camera_name}</div><div class="tc">${c.time_range}</div>
         <div class="sum">${c.summary}</div></div>`;
+      card.onclick=()=>seekTo(c.camera_id,c.start_sec,`${c.camera_name} @ ${c.time_range}`);
       $("#grid").appendChild(card);
     });
+    // Jump the player to the top cited moment ("when did it happen").
+    if(d.citations.length){
+      const t=d.citations[0];
+      seekTo(t.camera_id,t.start_sec,`${t.camera_name} @ ${t.time_range}`);
+      $("#gridhint").textContent="Other matching moments (click any clip to jump the video):";
+    } else { $("#clip").style.display="none"; $("#gridhint").textContent=""; }
     speak(d.answer);
   }catch(e){$("#answerText").innerHTML=`<span class="err">request failed: ${e}</span>`;}
 }

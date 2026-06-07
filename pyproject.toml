@@ -28,7 +28,9 @@ web = [
     "uvicorn[standard]>=0.29",
 ]
 moss = [
-    "moss>=0.1",
+    # The Moss native runtime runs in the Linux sidecar (see moss_sidecar/), not on the
+    # Mac. The app only needs an HTTP client to reach it.
+    "requests>=2.31",
 ]
 voice = [
     "livekit-agents>=0.12",

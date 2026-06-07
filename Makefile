@@ -9,8 +9,11 @@ setup:  ## install all extras for the demo
 ollama:  ## start the on-device model server (official app binary)
 	/Applications/Ollama.app/Contents/Resources/ollama serve
 
-web:  ## launch the demo web UI at http://127.0.0.1:8000
-	. $(VENV) && EYEBRAIN_EMBEDDER=fastembed python -m eyebrain.web.app
+web:  ## launch the demo (Moss-powered retrieval, on-device fallback) at :8000
+	. $(VENV) && EYEBRAIN_RETRIEVER=moss EYEBRAIN_EMBEDDER=fastembed python -m eyebrain.web.app
+
+web-local:  ## launch the demo on pure on-device retrieval (no Moss dependency)
+	. $(VENV) && EYEBRAIN_RETRIEVER=local EYEBRAIN_EMBEDDER=fastembed python -m eyebrain.web.app
 
 ask:  ## one-off CLI query: make ask Q="When did the display get knocked over?"
 	. $(VENV) && eyebrain ask "$(Q)" --embedder fastembed --top-k 5
@@ -30,3 +33,20 @@ demo-placeholder:  ## generate synthetic videos + index from caption sidecars (n
 
 clean-index:  ## wipe the local index + registry
 	rm -f data/index/moments.jsonl data/index/embeddings.npy data/index/cameras.json
+
+# --- Moss sidecar (runs Moss in Linux x86_64; the Mac talks to it over HTTP) ---
+moss-build:  ## build the Moss sidecar image
+	docker build --platform linux/amd64 -t eyebrain-moss ./moss_sidecar
+
+moss-up:  ## run the Moss sidecar (reads Moss creds from .env)
+	docker run -d --rm --name eyebrain-moss -p 8077:8077 --env-file .env eyebrain-moss
+	@echo "waiting for sidecar..."; until curl -sf http://127.0.0.1:8077/health >/dev/null; do sleep 1; done; echo "moss sidecar up"
+
+moss-down:  ## stop the Moss sidecar
+	-docker stop eyebrain-moss
+
+moss-sync:  ## push the local index into Moss (run after ingesting cameras)
+	. $(VENV) && python scripts/sync_to_moss.py --reset
+
+web-moss:  ## launch the web UI backed by Moss retrieval
+	. $(VENV) && EYEBRAIN_RETRIEVER=moss EYEBRAIN_EMBEDDER=fastembed python -m eyebrain.web.app

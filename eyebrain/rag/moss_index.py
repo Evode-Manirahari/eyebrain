@@ -1,147 +1,97 @@
-"""Moss-backed retrieval — the sponsor (Moss) semantic-search runtime as eyebrain's
-'central node'.
+"""Moss-backed retrieval via the Linux sidecar (sponsor: Moss semantic-search runtime).
 
-Cameras caption frames locally with Qwen-VL; only the compact text moment (summary +
-camera + timecode metadata) is sent to Moss. Raw video never leaves the node. Moss does
-the sub-10ms hybrid (semantic + keyword) retrieval across all cameras; Qwen then
-synthesizes the cited answer on top. This mirrors eyebrain's stated architecture exactly.
+The Moss native runtime has no macOS x86_64 wheel, so it runs in a Linux container
+(see moss_sidecar/) and we talk to it over loopback HTTP. This module is the Mac-side
+client: it maps Moments to/from Moss documents and forwards add/query/clear to the
+sidecar. Credentials (MOSS_PROJECT_ID/KEY) live in the sidecar's env, not here.
 
-Drop-in compatible with `eyebrain.index.MomentIndex`: exposes `search(question, top_k)
--> list[QueryResult]`, `add_moments(...)`, `count()`, and `clear()`. The local fastembed
-`MomentIndex` remains the offline/no-key fallback (see `rag.retriever.make_retriever`).
+eyebrain's pitch, made literal: cameras caption frames locally with Qwen-VL; only the
+compact text moment (summary + camera/timecode metadata) goes to Moss. Raw video never
+leaves the node. Moss does sub-10ms hybrid retrieval across all cameras; Qwen synthesizes
+the cited answer on top.
 
-STATUS: requires MOSS_PROJECT_ID / MOSS_PROJECT_KEY (free at portal.usemoss.dev).
-The Moss SDK is async; we wrap it behind the sync interface the web/voice layers use.
-Not exercised in CI — verify once keys are available.
-"""
+Drop-in compatible with MomentIndex: search / add_moments / count / clear.
+Activate with EYEBRAIN_RETRIEVER=moss (see rag.retriever). STATUS: requires the sidecar
+running (make moss-up) with valid Moss creds; not exercised in CI."""
 
 from __future__ import annotations
 
-import asyncio
 import os
+
+import requests
 
 from ..models import Moment, QueryResult
 
-_DEFAULT_INDEX = os.getenv("EYEBRAIN_MOSS_INDEX", "eyebrain")
-# alpha: 1.0 = pure semantic, 0.0 = pure keyword. 0.7 blends both (good for proper nouns
-# like "red jacket" plus semantic paraphrase like "knocked over" ~ "bumped / fell").
-_DEFAULT_ALPHA = float(os.getenv("EYEBRAIN_MOSS_ALPHA", "0.7"))
-
-
-def _run(coro):
-    """Run an async Moss call from sync code. FastAPI runs sync endpoints in a worker
-    thread, so a fresh event loop here is safe."""
-    return asyncio.run(coro)
+_DEFAULT_URL = os.getenv("MOSS_SIDECAR_URL", "http://127.0.0.1:8077")
+_DEFAULT_ALPHA = float(os.getenv("EYEBRAIN_MOSS_ALPHA", "0.7"))  # 1=semantic, 0=keyword
 
 
 class MossIndex:
-    def __init__(
-        self,
-        index_name: str = _DEFAULT_INDEX,
-        project_id: str | None = None,
-        project_key: str | None = None,
-    ) -> None:
-        self.index_name = index_name
-        self._project_id = project_id or os.getenv("MOSS_PROJECT_ID")
-        self._project_key = project_key or os.getenv("MOSS_PROJECT_KEY")
-        if not (self._project_id and self._project_key):
-            raise RuntimeError(
-                "Moss credentials missing. Set MOSS_PROJECT_ID and MOSS_PROJECT_KEY "
-                "(free at portal.usemoss.dev)."
-            )
-        self._loaded = False
+    name = "moss"
 
-    def _client(self):
-        from moss import MossClient
-
-        return MossClient(self._project_id, self._project_key)
+    def __init__(self, sidecar_url: str | None = None, timeout: float = 30.0) -> None:
+        self.url = (sidecar_url or _DEFAULT_URL).rstrip("/")
+        self.timeout = timeout
+        # Fail fast if the sidecar isn't up, so the retriever factory falls back to local.
+        r = requests.get(f"{self.url}/health", timeout=3)
+        r.raise_for_status()
 
     @staticmethod
-    def _to_document(m: Moment):
-        from moss import DocumentInfo
-
-        return DocumentInfo(
-            id=m.id,
-            text=m.searchable_text(),
-            metadata={
+    def _to_doc(m: Moment) -> dict:
+        # Moss metadata values must all be strings; _to_moment parses numerics back.
+        return {
+            "id": m.id,
+            "text": m.searchable_text(),
+            "metadata": {
                 "camera_id": m.camera_id,
                 "camera_name": m.camera_name or "",
-                "start_sec": m.start_sec,
-                "end_sec": m.end_sec,
+                "start_sec": str(m.start_sec),
+                "end_sec": str(m.end_sec),
                 "summary": m.summary,
                 "tags": ",".join(m.tags),
-                "confidence": m.confidence,
+                "confidence": str(m.confidence),
             },
-        )
+        }
 
     @staticmethod
-    def _to_moment(doc) -> Moment:
-        md = doc.metadata or {}
+    def _to_moment(doc: dict) -> Moment:
+        md = doc.get("metadata") or {}
+        start = float(md.get("start_sec", 0.0))
         return Moment(
-            id=doc.id,
+            id=doc.get("id"),
             camera_id=md.get("camera_id", "unknown"),
             camera_name=md.get("camera_name") or None,
-            start_sec=float(md.get("start_sec", 0.0)),
-            end_sec=float(md.get("end_sec", md.get("start_sec", 0.0))),
-            summary=md.get("summary") or doc.text,
+            start_sec=start,
+            end_sec=float(md.get("end_sec", start)),
+            summary=md.get("summary") or doc.get("text", ""),
             tags=[t for t in (md.get("tags") or "").split(",") if t],
             confidence=float(md.get("confidence", 0.75)),
         )
 
-    # --- mutation ---
-    async def _ensure_index(self, client, initial_docs: list | None = None) -> None:
-        existing = {ix.name for ix in await client.list_indexes()}
-        if self.index_name not in existing:
-            await client.create_index(self.index_name, initial_docs or [], "moss-minilm")
-
     def add_moments(self, moments: list[Moment]) -> int:
         if not moments:
             return 0
-        docs = [self._to_document(m) for m in moments]
-
-        async def _add():
-            client = self._client()
-            existing = {ix.name for ix in await client.list_indexes()}
-            if self.index_name not in existing:
-                await client.create_index(self.index_name, docs, "moss-minilm")
-            else:
-                await client.add_docs(self.index_name, docs)
-            return len(docs)
-
-        return _run(_add())
+        docs = [self._to_doc(m) for m in moments]
+        r = requests.post(f"{self.url}/add", json={"docs": docs}, timeout=self.timeout)
+        r.raise_for_status()
+        return int(r.json().get("added", 0))
 
     def clear(self) -> None:
-        async def _clear():
-            client = self._client()
-            existing = {ix.name for ix in await client.list_indexes()}
-            if self.index_name in existing:
-                await client.delete_index(self.index_name)
+        requests.post(f"{self.url}/clear", timeout=self.timeout).raise_for_status()
 
-        _run(_clear())
-        self._loaded = False
-
-    # --- query ---
     def search(self, question: str, top_k: int = 5) -> list[QueryResult]:
-        from moss import QueryOptions
-
-        async def _q():
-            client = self._client()
-            await client.load_index(self.index_name)
-            res = await client.query(
-                self.index_name, question, QueryOptions(top_k=top_k, alpha=_DEFAULT_ALPHA)
-            )
-            return res.docs
-
-        docs = _run(_q())
-        return [QueryResult(moment=self._to_moment(d), score=float(d.score)) for d in docs]
+        r = requests.post(
+            f"{self.url}/query",
+            json={"text": question, "top_k": top_k, "alpha": _DEFAULT_ALPHA},
+            timeout=self.timeout,
+        )
+        r.raise_for_status()
+        docs = r.json().get("docs", [])
+        return [QueryResult(moment=self._to_moment(d), score=float(d.get("score", 0.0))) for d in docs]
 
     def count(self) -> int:
-        async def _c():
-            client = self._client()
-            try:
-                ix = await client.get_index(self.index_name)
-                return int(getattr(ix, "document_count", 0) or 0)
-            except Exception:
-                return 0
-
-        return _run(_c())
+        try:
+            r = requests.get(f"{self.url}/count", timeout=5)
+            return int(r.json().get("count", 0))
+        except Exception:
+            return 0
