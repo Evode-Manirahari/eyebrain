@@ -71,7 +71,7 @@ async def entrypoint(ctx) -> None:
             return answer.answer
 
     await ctx.connect()
-    session = AgentSession(
+    session = AgentSession(  # type: ignore[var-annotated]
         stt=_build_stt(),
         # On-device LLM via Ollama's OpenAI-compatible API (keeps reasoning on-device).
         llm=openai.LLM(model=LLM_MODEL, base_url=f"{OLLAMA_HOST}/v1", api_key="ollama"),

@@ -33,7 +33,7 @@ def render(cam: str, scenes) -> Path:
     for f in range(DUR * FPS):
         t = f / FPS
         img = np.full((H, W, 3), 28, np.uint8)
-        label = next((l for s, e, l in scenes if s <= t < e), "")
+        label = next((txt for s, e, txt in scenes if s <= t < e), "")
         cv2.rectangle(img, (0, 0), (W, 26), (50, 60, 70), -1)
         cv2.putText(img, f"{cam.upper()}  {t:5.1f}s", (10, 19),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (220, 220, 220), 1, cv2.LINE_AA)
