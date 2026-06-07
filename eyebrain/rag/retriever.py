@@ -1,5 +1,5 @@
 """Retriever factory: choose the Moss runtime (sponsor, on-device-capable) or the local
-local store (offline fallback). Both expose `search(question, top_k) -> list[QueryResult]`
+store (offline fallback). Both expose `search(question, top_k) -> list[QueryResult]`
 and `count() -> int`, so the web and voice layers don't care which is active.
 
 Select with EYEBRAIN_RETRIEVER=moss|local (default: local). Moss requires MOSS_PROJECT_ID /
