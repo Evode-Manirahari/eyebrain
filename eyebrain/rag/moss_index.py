@@ -58,7 +58,7 @@ class MossIndex:
         md = doc.get("metadata") or {}
         start = float(md.get("start_sec", 0.0))
         return Moment(
-            id=doc.get("id"),
+            id=str(doc.get("id") or ""),
             camera_id=md.get("camera_id", "unknown"),
             camera_name=md.get("camera_name") or None,
             start_sec=start,

@@ -82,7 +82,7 @@ class HashingEmbedder:
 
     name = "hash"
 
-    def __init__(self, dimension: int = 512) -> None:
+    def __init__(self, dimension: int = 4096) -> None:
         self.dimension = dimension
 
     def encode(self, texts: Sequence[str]) -> list[list[float]]:

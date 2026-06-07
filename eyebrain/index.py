@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Iterable
 
@@ -53,17 +54,39 @@ class MomentIndex:
         self._write(existing.values())
         return indexed
 
-    def search(self, question: str, top_k: int = 5, min_score: float = 1e-6) -> list[QueryResult]:
+    def search(self, question: str, top_k: int = 5, min_score: float | None = None) -> list[QueryResult]:
+        indexed_moments = self.load()
+        if not indexed_moments:
+            return []
+
+        if min_score is None:
+            min_score = float(os.getenv("EYEBRAIN_MIN_SCORE", "0.12"))
         query_embedding = self.embedder.encode([question])[0]
+        embeddings = self._compatible_embeddings(indexed_moments, len(query_embedding))
         results: list[QueryResult] = []
-        for indexed in self.load():
-            score = cosine_similarity(query_embedding, indexed.embedding)
+        for indexed, embedding in zip(indexed_moments, embeddings):
+            score = cosine_similarity(query_embedding, embedding)
             if score < min_score:
                 continue
             moment = Moment.model_validate(indexed.model_dump(exclude={"embedding", "embedding_backend"}))
             results.append(QueryResult(moment=moment, score=score))
         results.sort(key=lambda result: result.score, reverse=True)
         return results[:top_k]
+
+    def _compatible_embeddings(self, moments: list[IndexedMoment], dimension: int) -> list[list[float]]:
+        stale_indexes = [
+            index
+            for index, moment in enumerate(moments)
+            if moment.embedding_backend != self.embedder.name or len(moment.embedding) != dimension
+        ]
+        if not stale_indexes:
+            return [moment.embedding for moment in moments]
+
+        embeddings = [moment.embedding for moment in moments]
+        refreshed = self.embedder.encode([moments[index].searchable_text() for index in stale_indexes])
+        for index, embedding in zip(stale_indexes, refreshed):
+            embeddings[index] = embedding
+        return embeddings
 
     def _write(self, moments: Iterable[IndexedMoment]) -> None:
         self.index_dir.mkdir(parents=True, exist_ok=True)

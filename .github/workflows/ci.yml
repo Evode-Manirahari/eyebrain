@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Create venv
+        run: uv venv --python 3.11
+      - name: Install
+        run: uv pip install -e '.[dev,semantic,vision,web,moss]'
+      - name: Lint (ruff)
+        run: uv run ruff check eyebrain scripts moss_sidecar tests
+      - name: Tests (pytest)
+        run: uv run pytest -q
+      - name: Type check (mypy — informational)
+        run: uv run mypy eyebrain
+        continue-on-error: true
