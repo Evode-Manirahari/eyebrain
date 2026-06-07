@@ -44,11 +44,12 @@ INDEX_HTML = r"""<!doctype html>
   .dot{width:7px;height:7px;border-radius:50%;background:#ff5d5d;box-shadow:0 0 8px #ff5d5d}
   .cam .nm{padding:11px 13px;font-weight:600;font-size:14px}
   .cam .nm small{display:block;color:var(--muted);font-weight:400;font-size:12px;margin-top:2px}
-  .single{display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
-  @media(max-width:820px){.single{grid-template-columns:1fr}}
-  #player{width:100%;max-height:460px;border-radius:12px;background:#000;display:block}
-  .panelttl{color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin:2px 0 8px}
-  .script{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;max-height:460px;overflow:auto}
+  #player{width:100%;max-height:520px;border-radius:12px;background:#000;display:block}
+  details.log{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px 14px}
+  details.log summary{cursor:pointer;color:var(--muted);font-size:13px;padding:8px 0;list-style:none}
+  details.log summary::-webkit-details-marker{display:none}
+  details.log[open] summary{color:var(--accent)}
+  .script{padding:4px 0 10px;max-height:340px;overflow:auto}
   .ev{display:flex;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer}
   .ev:hover{background:#182230} .ev .t{color:var(--accent2);font-size:12px;flex:none;width:96px}
   .ev .s{font-size:13px;color:var(--txt)}
@@ -132,10 +133,9 @@ function renderAll(){
 
 async function renderSingle(cam){
   const v=$("#view");
-  v.innerHTML=`<div class="single">
-      <div><video id="player" controls playsinline preload="auto" src="/api/video/${encodeURIComponent(cam)}"></video></div>
-      <div><div class="panelttl">${camName(cam)} — script</div><div class="script" id="script">loading…</div></div>
-    </div>`;
+  v.innerHTML=`<video id="player" controls playsinline preload="auto" src="/api/video/${encodeURIComponent(cam)}"></video>
+    <details class="log"><summary>▸ Camera log — what eyebrain saw (click to expand)</summary>
+      <div class="script" id="script">loading…</div></details>`;
   try{
     const d=await (await fetch("/api/moments?camera="+encodeURIComponent(cam))).json();
     const s=$("#script"); s.innerHTML="";
