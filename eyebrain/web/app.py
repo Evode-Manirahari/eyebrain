@@ -68,20 +68,22 @@ def cameras() -> JSONResponse:
 
 @app.get("/api/moments")
 def moments(camera: str = Query(...)) -> JSONResponse:
-    """A camera's 'script' — its caption timeline, in time order."""
+    """A camera's 'script' — a CLEAN event log (tidied + de-duplicated), not the raw
+    per-frame captions, so the timeline reads as distinct events you can click to seek."""
     from ..index import MomentIndex
+    from ..rag.synthesize import _similar, _tidy
 
-    ms = [m for m in MomentIndex().load() if m.camera_id == camera]
-    ms.sort(key=lambda m: m.start_sec)
-    return JSONResponse(
-        {
-            "camera": camera,
-            "moments": [
-                {"time_range": m.time_range, "start_sec": m.start_sec, "summary": m.summary}
-                for m in ms
-            ],
-        }
-    )
+    ms = sorted((m for m in MomentIndex().load() if m.camera_id == camera), key=lambda m: m.start_sec)
+    events = []
+    for m in ms:
+        text = _tidy(m.summary).strip()
+        if not text:
+            continue
+        text = text[0].upper() + text[1:]
+        if events and _similar(events[-1]["summary"], text):  # collapse repeated frames
+            continue
+        events.append({"time_range": m.time_range, "start_sec": m.start_sec, "summary": text})
+    return JSONResponse({"camera": camera, "moments": events})
 
 
 @app.post("/api/ask")
