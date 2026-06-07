@@ -97,7 +97,7 @@ function renderChips(){
 }
 async function loadStatus(){
   try{const r=await fetch("/api/cameras");const d=await r.json();
-    $("#status").innerHTML=`${d.cameras.length} cameras &middot; ${d.indexed_moments} moments &middot; ${d.retriever}`;
+    $("#status").innerHTML=`${d.cameras.length} cameras &middot; ${d.indexed_moments} moments indexed &middot; on-device`;
   }catch(e){$("#status").textContent="offline";}
 }
 // Clip player: load a camera's video and seek to a cited timecode.
