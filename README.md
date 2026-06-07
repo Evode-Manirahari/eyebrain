@@ -145,7 +145,7 @@ make moss-sync                  # push moments into Moss (skip to stay local)
 python -m eyebrain.voice.agent dev    # then talk to it in agents-playground.livekit.io
 ```
 
-Pure on-device (no Moss dependency): `make web-local`. Demo script: [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md).
+Demo script: [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md).
 
 ---
 
